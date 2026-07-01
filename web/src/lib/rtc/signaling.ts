@@ -12,10 +12,26 @@ export type Peer = {
 
 export type ChatMessage = { from: string; name: string; text: string; at: number };
 
+export type WelcomeExtras = {
+  teleprompter: string | null;
+  waiting?: Peer[];
+};
+
 export type SignalingEvents = {
-  onWelcome: (self: Peer, peers: Peer[], recording: { recordingId: string; startedAtMs: number } | null) => void;
+  onWelcome: (
+    self: Peer,
+    peers: Peer[],
+    recording: { recordingId: string; startedAtMs: number } | null,
+    extras: WelcomeExtras
+  ) => void;
   onPeerJoined: (peer: Peer) => void;
   onPeerLeft: (participantId: string) => void;
+  onWaitingRoom?: () => void;
+  onDeclined?: () => void;
+  onWaitingGuest?: (peer: Peer) => void;
+  onWaitingLeft?: (participantId: string) => void;
+  onForceMute?: () => void;
+  onTeleprompter?: (script: string) => void;
   onSignal: (from: string, data: any) => void;
   onPeerState: (participantId: string, state: PeerState) => void;
   onPeerUpload: (participantId: string, health: UploadHealth | null) => void;
@@ -76,6 +92,12 @@ export class Signaling {
         this.events.onReplaced?.();
         return;
       }
+      if (event.code === 4403) {
+        // Host declined entry from the waiting room.
+        this.closed = true;
+        this.events.onDeclined?.();
+        return;
+      }
       if (!this.closed) {
         setTimeout(() => this.connect(), this.reconnectDelay);
         this.reconnectDelay = Math.min(this.reconnectDelay * 2, 15_000);
@@ -111,6 +133,22 @@ export class Signaling {
     this.send({ t: "upload", health });
   }
 
+  sendAdmit(participantId: string): void {
+    this.send({ t: "admit", participantId });
+  }
+
+  sendDecline(participantId: string): void {
+    this.send({ t: "decline", participantId });
+  }
+
+  sendForceMute(participantId: string): void {
+    this.send({ t: "force-mute", participantId });
+  }
+
+  sendTeleprompter(script: string): void {
+    this.send({ t: "teleprompter-set", script });
+  }
+
   private sendPing(): void {
     this.lastPingSentAt = Date.now();
     this.send({ t: "ping", now: this.lastPingSentAt });
@@ -119,7 +157,28 @@ export class Signaling {
   private handleMessage(msg: any): void {
     switch (msg.t) {
       case "welcome":
-        this.events.onWelcome(msg.self, msg.peers, msg.recording);
+        this.events.onWelcome(msg.self, msg.peers, msg.recording, {
+          teleprompter: msg.teleprompter ?? null,
+          waiting: msg.waiting,
+        });
+        break;
+      case "waiting-room":
+        this.events.onWaitingRoom?.();
+        break;
+      case "declined":
+        this.events.onDeclined?.();
+        break;
+      case "waiting-guest":
+        this.events.onWaitingGuest?.(msg.peer);
+        break;
+      case "waiting-left":
+        this.events.onWaitingLeft?.(msg.participantId);
+        break;
+      case "force-mute":
+        this.events.onForceMute?.();
+        break;
+      case "teleprompter":
+        this.events.onTeleprompter?.(msg.script ?? "");
         break;
       case "peer-joined":
         this.events.onPeerJoined(msg.peer);

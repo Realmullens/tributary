@@ -14,6 +14,11 @@ participant — plus mixed exports — no matter how rough the live connection w
 - **Live studio room** — mesh WebRTC (host + up to ~5 guests), tiles with mute/camera state,
   screen sharing, text chat, presence, reconnecting states, and a stall watchdog that rebuilds
   peer connections whose ICE agent never comes up.
+- **Waiting room** — optional per-session lobby: guests hold until the host admits or declines;
+  admitted guests skip the queue on refresh.
+- **Host controls** — force-mute any guest; per-tile local volume sliders.
+- **Teleprompter** — host-editable script synced to every participant, with per-person
+  auto-scroll speed and font size.
 - **Local-first recording** — host hits Record; a server-side countdown broadcasts to everyone,
   then the server issues the authoritative start timestamp; each client records its own devices
   with `MediaRecorder` (3s chunks). Every chunk is written to IndexedDB *before* upload, then
@@ -37,7 +42,9 @@ participant — plus mixed exports — no matter how rough the live connection w
   transcript viewer. (Uses `whisper-cli` — `brew install whisper-cpp`; the model auto-downloads
   on first use.)
 - **Session dashboard** — takes, participants, per-track status (chunk counts while uploading),
-  downloads, mixed exports, transcripts, retry-processing, auto-record toggle.
+  downloads, mixed exports, transcripts, retry-processing, auto-record and waiting-room toggles.
+- **Premiere/FCP XML export** — one click gives you an xmeml timeline that drops the downloaded
+  MP4/WAV tracks onto synced tracks in Premiere Pro or DaVinci Resolve, offsets applied.
 - **TURN-ready** — set `ICE_SERVERS` to add a TURN relay for guests behind strict NATs; see
   [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for HTTPS + coturn recipes.
 

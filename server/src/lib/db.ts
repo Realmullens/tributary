@@ -105,7 +105,12 @@ CREATE INDEX IF NOT EXISTS idx_sessions_studio ON sessions(studio_id);
 `);
 
 // Additive migrations for databases created before these columns existed.
-for (const migration of ["ALTER TABLE sessions ADD COLUMN auto_record INTEGER NOT NULL DEFAULT 0"]) {
+for (const migration of [
+  "ALTER TABLE sessions ADD COLUMN auto_record INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE sessions ADD COLUMN waiting_room INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE sessions ADD COLUMN teleprompter_script TEXT",
+  "ALTER TABLE participants ADD COLUMN admitted_at INTEGER",
+]) {
   try {
     db.exec(migration);
   } catch {
@@ -155,6 +160,8 @@ export type SessionRow = {
   created_at: number;
   ended_at: number | null;
   auto_record?: number;
+  waiting_room?: number;
+  teleprompter_script?: string | null;
 };
 
 export type ParticipantRow = {
@@ -167,6 +174,7 @@ export type ParticipantRow = {
   created_at: number;
   joined_at: number | null;
   left_at: number | null;
+  admitted_at?: number | null;
 };
 
 export type RecordingRow = {

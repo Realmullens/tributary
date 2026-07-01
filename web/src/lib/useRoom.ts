@@ -31,6 +31,10 @@ export function useRoom(config: RoomConfig) {
   const [myUpload, setMyUpload] = useState<UploadHealth | null>(null);
   const [connected, setConnected] = useState(false);
   const [replaced, setReplaced] = useState(false);
+  const [waiting, setWaiting] = useState(false);
+  const [declined, setDeclined] = useState(false);
+  const [waitingGuests, setWaitingGuests] = useState<Peer[]>([]);
+  const [teleprompter, setTeleprompter] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const signalingRef = useRef<Signaling | null>(null);
@@ -69,7 +73,10 @@ export function useRoom(config: RoomConfig) {
 
     const rtcConfigPromise = fetchRtcConfig();
     const signaling = new Signaling(config.token, {
-      onWelcome: async (_self, existingPeers, activeRecording) => {
+      onWelcome: async (_self, existingPeers, activeRecording, extras) => {
+        setWaiting(false);
+        setTeleprompter(extras.teleprompter ?? "");
+        if (extras.waiting) setWaitingGuests(extras.waiting);
         const rtcConfig = await rtcConfigPromise;
         const pm = new PeerManager(
           signaling,
@@ -129,6 +136,25 @@ export function useRoom(config: RoomConfig) {
       },
       onRecordingCountdown: (_seconds, startsAtMs) => setCountdownEndsAt(startsAtMs),
       onRecordingCountdownCancelled: () => setCountdownEndsAt(null),
+      onWaitingRoom: () => setWaiting(true),
+      onDeclined: () => setDeclined(true),
+      onWaitingGuest: (peer) =>
+        setWaitingGuests((prev) =>
+          prev.some((p) => p.participantId === peer.participantId) ? prev : [...prev, peer]
+        ),
+      onWaitingLeft: (participantId) =>
+        setWaitingGuests((prev) => prev.filter((p) => p.participantId !== participantId)),
+      onForceMute: () => {
+        for (const track of config.cameraStream.getAudioTracks()) track.enabled = false;
+        setMicOn(false);
+        signalingRef.current?.sendState({
+          mic: false,
+          cam: config.cameraStream.getVideoTracks().some((t) => t.enabled),
+          sharing: Boolean(screenStreamRef.current),
+        });
+        setError("The host muted your microphone.");
+      },
+      onTeleprompter: (script) => setTeleprompter(script),
       onReplaced: () => setReplaced(true),
       onConnectionChange: setConnected,
     });
@@ -261,6 +287,23 @@ export function useRoom(config: RoomConfig) {
     signalingRef.current?.sendChat(text);
   }, []);
 
+  const admitGuest = useCallback((participantId: string) => {
+    signalingRef.current?.sendAdmit(participantId);
+  }, []);
+
+  const declineGuest = useCallback((participantId: string) => {
+    signalingRef.current?.sendDecline(participantId);
+  }, []);
+
+  const muteGuest = useCallback((participantId: string) => {
+    signalingRef.current?.sendForceMute(participantId);
+  }, []);
+
+  const saveTeleprompter = useCallback((script: string) => {
+    setTeleprompter(script);
+    signalingRef.current?.sendTeleprompter(script);
+  }, []);
+
   const toggleUploadsPaused = useCallback(() => {
     const engine = engineRef.current;
     if (!engine) return;
@@ -291,6 +334,14 @@ export function useRoom(config: RoomConfig) {
     myUpload,
     connected,
     replaced,
+    waiting,
+    declined,
+    waitingGuests,
+    admitGuest,
+    declineGuest,
+    muteGuest,
+    teleprompter,
+    saveTeleprompter,
     error,
     dismissError: () => setError(null),
   };

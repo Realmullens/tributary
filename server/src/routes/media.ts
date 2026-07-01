@@ -12,6 +12,8 @@ import { newId, requireUser } from "../lib/auth.js";
 import { exportPath, mp4TrackPath, rawTrackPath, wavTrackPath } from "../lib/storage.js";
 import { queueMixedExport, reprocessTrack } from "../jobs/pipeline.js";
 import { queueTranscription, renderTranscript } from "../jobs/transcribe.js";
+import { buildFcpXml } from "../lib/fcpxml.js";
+import { trackDownloadBase } from "../lib/filenames.js";
 
 function trackOwnedByUser(trackId: string, userId: string): (TrackRow & { participant_name: string }) | null {
   const row = db
@@ -26,9 +28,6 @@ function trackOwnedByUser(trackId: string, userId: string): (TrackRow & { partic
   return row ?? null;
 }
 
-function safeName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9-_ ]/g, "").replace(/\s+/g, "-").slice(0, 60) || "track";
-}
 
 function streamFile(
   reply: any,
@@ -55,7 +54,7 @@ export function registerMediaRoutes(app: FastifyInstance): void {
     const track = trackOwnedByUser(trackId, user.id);
     if (!track) return reply.code(404).send({ error: "Track not found" });
 
-    const base = `${safeName(track.participant_name)}-${track.type}-${trackId.slice(0, 6)}`;
+    const base = trackDownloadBase(track.participant_name, track.type, trackId);
     switch (kind ?? "mp4") {
       case "raw": {
         const ext = track.mime_type.startsWith("audio/pcm")
@@ -170,6 +169,37 @@ export function registerMediaRoutes(app: FastifyInstance): void {
         segments_json: undefined,
       },
     };
+  });
+
+  // Premiere/FCP-compatible timeline referencing the downloaded track files.
+  app.get("/api/recordings/:recordingId/xml", async (req, reply) => {
+    const user = requireUser(req, reply);
+    if (!user) return;
+    const { recordingId } = req.params as { recordingId: string };
+    const recording = recordingOwnedByUser(recordingId, user.id);
+    if (!recording) return reply.code(404).send({ error: "Recording not found" });
+
+    const tracks = db
+      .prepare(
+        `SELECT t.*, p.name AS participant_name FROM tracks t
+         JOIN participants p ON p.id = t.participant_id
+         WHERE t.recording_id = ? ORDER BY t.created_at ASC`
+      )
+      .all(recordingId) as (TrackRow & { participant_name: string })[];
+    if (!tracks.some((t) => t.status === "ready")) {
+      return reply.code(409).send({ error: "No ready tracks yet" });
+    }
+    const session = db
+      .prepare("SELECT title FROM sessions WHERE id = ?")
+      .get(recording.session_id) as { title: string } | undefined;
+
+    const xml = buildFcpXml(session?.title ?? "Tributary recording", tracks);
+    reply.header("Content-Type", "application/xml; charset=utf-8");
+    reply.header(
+      "Content-Disposition",
+      `attachment; filename="timeline-${recordingId.slice(0, 6)}.xml"`
+    );
+    return reply.send(xml);
   });
 
   app.get("/api/recordings/:recordingId/transcript/download", async (req, reply) => {

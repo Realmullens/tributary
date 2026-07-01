@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useRoom, type RoomConfig } from "../lib/useRoom";
 import { Badge, Button, formatBytes, formatDuration } from "./ui";
 import { ChatPanel } from "./ChatPanel";
+import { Teleprompter } from "./Teleprompter";
 import { VideoTile } from "./VideoTile";
 
 function ControlButton({
@@ -42,6 +43,7 @@ export function RoomView({
 }) {
   const room = useRoom(config);
   const [chatOpen, setChatOpen] = useState(false);
+  const [prompterOpen, setPrompterOpen] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [countdownLeft, setCountdownLeft] = useState<number | null>(null);
 
@@ -91,6 +93,29 @@ export function RoomView({
     );
   }
 
+  if (room.declined) {
+    config.cameraStream.getTracks().forEach((t) => t.stop());
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-3 p-8 text-center">
+        <h1 className="text-xl font-semibold">Entry declined</h1>
+        <p className="max-w-md text-sm text-gray-400">The host declined your request to join.</p>
+      </div>
+    );
+  }
+
+  if (room.waiting) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-4 p-8 text-center">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-600 border-t-white" />
+        <h1 className="text-xl font-semibold">Waiting for the host to let you in</h1>
+        <p className="max-w-md text-sm text-gray-400">
+          You're in the waiting room for {sessionTitle}. Keep this tab open — you'll join
+          automatically once admitted.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen flex-col">
       {/* Header */}
@@ -123,6 +148,25 @@ export function RoomView({
           <button onClick={room.dismissError} className="ml-4 text-rec hover:text-white">✕</button>
         </div>
       )}
+
+      {/* Waiting-room queue (hosts only) */}
+      {config.isHost &&
+        room.waitingGuests.map((guest) => (
+          <div
+            key={guest.participantId}
+            className="flex items-center justify-between border-b border-accent/40 bg-accent/10 px-4 py-2 text-sm"
+          >
+            <span>
+              <span className="font-medium">{guest.name}</span> is waiting to join
+            </span>
+            <span className="flex gap-2">
+              <Button onClick={() => room.admitGuest(guest.participantId)}>Admit</Button>
+              <Button variant="ghost" onClick={() => room.declineGuest(guest.participantId)}>
+                Decline
+              </Button>
+            </span>
+          </div>
+        ))}
 
       {/* Stage */}
       <div className="flex min-h-0 flex-1">
@@ -159,6 +203,7 @@ export function RoomView({
                 micOn={p.state.mic}
                 camOn={p.state.cam}
                 upload={p.upload}
+                onHostMute={config.isHost ? () => room.muteGuest(p.participantId) : undefined}
               />
             ))}
           </div>
@@ -176,6 +221,14 @@ export function RoomView({
             onClose={() => setChatOpen(false)}
           />
         )}
+        {prompterOpen && (
+          <Teleprompter
+            script={room.teleprompter}
+            canEdit={config.isHost}
+            onSave={room.saveTeleprompter}
+            onClose={() => setPrompterOpen(false)}
+          />
+        )}
       </div>
 
       {/* Controls */}
@@ -187,6 +240,10 @@ export function RoomView({
           onClick={room.screenStream ? room.stopShare : () => void room.startShare()}
         />
         <ControlButton label={chatOpen ? "Hide chat" : "Chat"} onClick={() => setChatOpen((v) => !v)} />
+        <ControlButton
+          label={prompterOpen ? "Hide script" : "Script"}
+          onClick={() => setPrompterOpen((v) => !v)}
+        />
         {(room.recording || (room.myUpload && room.myUpload.state !== "complete")) && (
           <ControlButton
             label={room.uploadsPaused ? "Resume uploads" : "Pause uploads"}

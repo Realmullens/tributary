@@ -35,6 +35,7 @@ export type Session = {
   created_at: number;
   ended_at: number | null;
   auto_record?: number;
+  waiting_room?: number;
 };
 export type Recording = {
   id: string;

@@ -124,18 +124,32 @@ export function SessionDetailPage() {
         </div>
       </div>
 
-      <label className="mt-4 flex items-center gap-2 text-sm text-gray-300">
-        <input
-          type="checkbox"
-          checked={Boolean(session.auto_record)}
-          onChange={async (e) => {
-            await api(`/api/sessions/${session.id}`, { method: "PATCH", body: { autoRecord: e.target.checked } });
-            await load();
-          }}
-          className="h-4 w-4 accent-[#4f7cff]"
-        />
-        Auto-record when the first guest joins (3s countdown)
-      </label>
+      <div className="mt-4 flex flex-wrap gap-6">
+        <label className="flex items-center gap-2 text-sm text-gray-300">
+          <input
+            type="checkbox"
+            checked={Boolean(session.auto_record)}
+            onChange={async (e) => {
+              await api(`/api/sessions/${session.id}`, { method: "PATCH", body: { autoRecord: e.target.checked } });
+              await load();
+            }}
+            className="h-4 w-4 accent-[#4f7cff]"
+          />
+          Auto-record when the first guest joins (3s countdown)
+        </label>
+        <label className="flex items-center gap-2 text-sm text-gray-300">
+          <input
+            type="checkbox"
+            checked={Boolean(session.waiting_room)}
+            onChange={async (e) => {
+              await api(`/api/sessions/${session.id}`, { method: "PATCH", body: { waitingRoom: e.target.checked } });
+              await load();
+            }}
+            className="h-4 w-4 accent-[#4f7cff]"
+          />
+          Guests wait in lobby until admitted
+        </label>
+      </div>
 
       {participants.length > 0 && (
         <Card className="mt-6">
@@ -280,6 +294,15 @@ export function SessionDetailPage() {
                     <span className="text-xs text-rec" title={transcript.error}>error</span>
                   )}
                 </span>
+              )}
+              {readyTracks.length > 0 && (
+                <a
+                  className="text-xs text-blue-300 hover:underline"
+                  href={`/api/recordings/${recording.id}/xml`}
+                  title="Premiere/Resolve-compatible timeline. Put it in the same folder as the downloaded MP4/WAV tracks."
+                >
+                  Premiere/FCP XML
+                </a>
               )}
             </div>
             {transcript?.status === "ready" && (

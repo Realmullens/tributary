@@ -175,10 +175,16 @@ export function registerSessionRoutes(app: FastifyInstance): void {
     const { sessionId } = req.params as { sessionId: string };
     const session = sessionOwnedByUser(sessionId, user.id);
     if (!session) return reply.code(404).send({ error: "Session not found" });
-    const body = (req.body ?? {}) as { autoRecord?: boolean };
+    const body = (req.body ?? {}) as { autoRecord?: boolean; waitingRoom?: boolean };
     if (typeof body.autoRecord === "boolean") {
       db.prepare("UPDATE sessions SET auto_record = ? WHERE id = ?").run(
         body.autoRecord ? 1 : 0,
+        sessionId
+      );
+    }
+    if (typeof body.waitingRoom === "boolean") {
+      db.prepare("UPDATE sessions SET waiting_room = ? WHERE id = ?").run(
+        body.waitingRoom ? 1 : 0,
         sessionId
       );
     }
