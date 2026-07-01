@@ -75,6 +75,7 @@ export type Track = {
   height: number | null;
   error: string | null;
   created_at: number;
+  enhanced?: number;
 };
 export type ExportItem = {
   id: string;

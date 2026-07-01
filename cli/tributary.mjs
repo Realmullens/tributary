@@ -122,7 +122,8 @@ const HELP = {
     "words <recordingId>": "word-level timestamps (for text-based editing decisions)",
     "export <recordingId> [--audio] [--trim-start MS] [--trim-end MS] [--cut START-END ...] [--aspect 16:9|1:1|9:16] [--captions] [--wait] [-o file]":
       "render a mixed export / clip; --cut is repeatable, times in ms on the recording timeline",
-    "download-track <trackId> [--kind mp4|wav|raw] -o file": "download a participant track",
+    "download-track <trackId> [--kind mp4|wav|raw|enhanced] -o file": "download a participant track",
+    "enhance <trackId>": "noise reduction + loudness normalization; later mixes prefer the enhanced audio",
     "download-export <exportId> -o file [--srt captions.srt]": "download a finished export (+ caption sidecar)",
     "xml <recordingId> -o file": "Premiere/FCP XML timeline for the recording",
   },
@@ -237,6 +238,13 @@ const commands = {
       }
     }
     out(result);
+  },
+
+  async enhance() {
+    const [trackId] = args;
+    if (!trackId) fail("usage: tributary enhance <trackId>");
+    await api(`/api/tracks/${trackId}/enhance`, { method: "POST", body: {} });
+    out({ ok: true, status: "queued" });
   },
 
   async "download-track"() {

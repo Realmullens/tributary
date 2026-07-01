@@ -8,6 +8,7 @@ import {
 } from "../lib/db.js";
 import {
   chunkPath,
+  enhancedWavPath,
   exportPath,
   mp4TrackPath,
   rawTrackPath,
@@ -15,6 +16,7 @@ import {
 } from "../lib/storage.js";
 import { broadcast } from "../lib/rooms.js";
 import {
+  enhanceWav,
   hasSubtitlesFilter,
   mixedAudioExport,
   mixedVideoExport,
@@ -232,6 +234,22 @@ async function processTrack(trackId: string): Promise<void> {
   checkRecordingComplete(track.recording_id);
 }
 
+/** Noise-reduce + loudness-normalize a track's voice WAV. */
+export function queueEnhanceTrack(trackId: string): boolean {
+  const track = getTrack(trackId);
+  if (!track || track.status !== "ready" || !fs.existsSync(wavTrackPath(trackId))) return false;
+  enqueue(async () => {
+    try {
+      await enhanceWav(wavTrackPath(trackId), enhancedWavPath(trackId));
+      db.prepare("UPDATE tracks SET enhanced = 1 WHERE id = ?").run(trackId);
+      notifyTrack(track.session_id, trackId, "ready");
+    } catch (err) {
+      console.error(`[jobs] enhance ${trackId} failed:`, err);
+    }
+  });
+  return true;
+}
+
 /** Re-run processing for a failed/stuck track (host action from dashboard). */
 export function reprocessTrack(trackId: string): boolean {
   const track = getTrack(trackId);
@@ -283,30 +301,41 @@ async function renderExport(exportId: string): Promise<void> {
       .all(exp.recording_id) as (TrackRow & { participant_name: string })[];
     if (tracks.length === 0) throw new Error("No ready tracks for this recording");
 
-    // When a participant has an uncompressed PCM track, use it as their audio
-    // source and mute their camera track's (lossy) audio to avoid doubling.
-    const participantsWithPcm = new Set(
-      tracks.filter((t) => t.type === "pcm").map((t) => t.participant_id)
-    );
-
+    // Video comes from the MP4s (audio muted); voice audio comes from one WAV
+    // per participant, preferring enhanced > uncompressed PCM > camera audio.
     const inputs: MixInput[] = [];
     let totalDurationMs = 0;
+
     for (const track of tracks) {
-      const hasVideo = track.width !== null;
-      const filePath = hasVideo
-        ? mp4TrackPath(track.id)
-        : wavTrackPath(track.id);
+      if (track.width === null) continue;
+      const filePath = mp4TrackPath(track.id);
       if (!fs.existsSync(filePath)) continue;
       const offsetMs = Math.max(0, track.start_offset_ms);
-      const audioSuperseded =
-        track.type === "camera" && participantsWithPcm.has(track.participant_id);
-      inputs.push({
-        filePath,
-        offsetMs,
-        hasVideo,
-        hasAudio: fs.existsSync(wavTrackPath(track.id)) && !audioSuperseded,
-        label: track.participant_name,
-      });
+      inputs.push({ filePath, offsetMs, hasVideo: true, hasAudio: false, label: track.participant_name });
+      totalDurationMs = Math.max(totalDurationMs, offsetMs + (track.duration_ms ?? 0));
+    }
+
+    const voiceByParticipant = new Map<string, TrackRow & { participant_name: string }>();
+    for (const track of tracks) {
+      if (track.type === "screen") continue;
+      const existing = voiceByParticipant.get(track.participant_id);
+      const score = (t: TrackRow) => (t.enhanced ? 2 : 0) + (t.type === "pcm" ? 1 : 0);
+      if (!existing || score(track) > score(existing)) {
+        voiceByParticipant.set(track.participant_id, track);
+      }
+    }
+    const audioTracks = [
+      ...voiceByParticipant.values(),
+      ...tracks.filter((t) => t.type === "screen"), // screen/system audio, if captured
+    ];
+    for (const track of audioTracks) {
+      const filePath =
+        track.enhanced && fs.existsSync(enhancedWavPath(track.id))
+          ? enhancedWavPath(track.id)
+          : wavTrackPath(track.id);
+      if (!fs.existsSync(filePath)) continue;
+      const offsetMs = Math.max(0, track.start_offset_ms);
+      inputs.push({ filePath, offsetMs, hasVideo: false, hasAudio: true, label: track.participant_name });
       totalDurationMs = Math.max(totalDurationMs, offsetMs + (track.duration_ms ?? 0));
     }
     if (inputs.length === 0 || totalDurationMs === 0) throw new Error("No usable track files");

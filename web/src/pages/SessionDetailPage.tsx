@@ -239,6 +239,24 @@ export function SessionDetailPage() {
                             )}
                             <a className="text-blue-300 hover:underline" href={`/api/tracks/${track.id}/download?kind=wav`}>WAV</a>
                             <a className="text-blue-300 hover:underline" href={`/api/tracks/${track.id}/download?kind=raw`}>Raw</a>
+                            {track.enhanced ? (
+                              <a className="text-emerald-300 hover:underline" href={`/api/tracks/${track.id}/download?kind=enhanced`}>
+                                Enhanced
+                              </a>
+                            ) : (
+                              track.type !== "screen" && (
+                                <button
+                                  className="text-blue-300 hover:underline"
+                                  title="Noise reduction + loudness normalization; mixes prefer it automatically"
+                                  onClick={async () => {
+                                    await api(`/api/tracks/${track.id}/enhance`, { body: {} });
+                                    await load();
+                                  }}
+                                >
+                                  Enhance
+                                </button>
+                              )
+                            )}
                           </div>
                         ) : track.status === "failed" ? (
                           <button onClick={() => void reprocess(track.id)} className="text-xs text-blue-300 hover:underline">

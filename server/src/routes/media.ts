@@ -9,8 +9,8 @@ import {
   type TranscriptSegment,
 } from "../lib/db.js";
 import { newId, requireUser } from "../lib/auth.js";
-import { exportPath, mp4TrackPath, rawTrackPath, wavTrackPath } from "../lib/storage.js";
-import { queueMixedExport, reprocessTrack } from "../jobs/pipeline.js";
+import { enhancedWavPath, exportPath, mp4TrackPath, rawTrackPath, wavTrackPath } from "../lib/storage.js";
+import { queueEnhanceTrack, queueMixedExport, reprocessTrack } from "../jobs/pipeline.js";
 import { queueTranscription, renderTranscript } from "../jobs/transcribe.js";
 import { buildFcpXml } from "../lib/fcpxml.js";
 import { trackDownloadBase } from "../lib/filenames.js";
@@ -90,11 +90,25 @@ export function registerMediaRoutes(app: FastifyInstance): void {
       }
       case "wav":
         return streamFile(req, reply, wavTrackPath(trackId), `${base}.wav`, "audio/wav");
+      case "enhanced":
+        return streamFile(req, reply, enhancedWavPath(trackId), `${base}.enhanced.wav`, "audio/wav");
       case "mp4":
       default:
         return streamFile(req, reply, mp4TrackPath(trackId), `${base}.mp4`, "video/mp4",
           (req.query as { inline?: string }).inline === "1");
     }
+  });
+
+  app.post("/api/tracks/:trackId/enhance", async (req, reply) => {
+    const user = requireUser(req, reply);
+    if (!user) return;
+    const { trackId } = req.params as { trackId: string };
+    const track = trackOwnedByUser(trackId, user.id);
+    if (!track) return reply.code(404).send({ error: "Track not found" });
+    if (!queueEnhanceTrack(trackId)) {
+      return reply.code(409).send({ error: "Track has no ready audio to enhance" });
+    }
+    return { ok: true };
   });
 
   app.post("/api/tracks/:trackId/reprocess", async (req, reply) => {

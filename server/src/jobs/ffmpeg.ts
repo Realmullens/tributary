@@ -61,6 +61,20 @@ export async function toWav(input: string, output: string): Promise<void> {
   await run(FFMPEG, ["-y", "-i", input, "-vn", "-ac", "2", "-ar", "48000", "-c:a", "pcm_s16le", output]);
 }
 
+/**
+ * "Magic Audio"-style cleanup: FFT noise reduction + broadcast loudness
+ * normalization (-16 LUFS, podcast standard). Pure ffmpeg — no ML deps.
+ */
+export async function enhanceWav(input: string, output: string): Promise<void> {
+  await run(FFMPEG, [
+    "-y",
+    "-i", input,
+    "-af", "afftdn=nr=12:nf=-30,loudnorm=I=-16:TP=-1.5:LRA=11",
+    "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le",
+    output,
+  ]);
+}
+
 /** Wrap a headerless s16le PCM stream (AudioWorklet capture) into a WAV container. */
 export async function rawPcmToWav(
   input: string,

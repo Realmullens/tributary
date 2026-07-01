@@ -113,6 +113,7 @@ for (const migration of [
   "ALTER TABLE exports ADD COLUMN params_json TEXT",
   "ALTER TABLE transcripts ADD COLUMN words_json TEXT",
   "ALTER TABLE sessions ADD COLUMN watch_token TEXT",
+  "ALTER TABLE tracks ADD COLUMN enhanced INTEGER NOT NULL DEFAULT 0",
 ]) {
   try {
     db.exec(migration);
@@ -219,6 +220,7 @@ export type TrackRow = {
   height: number | null;
   error: string | null;
   created_at: number;
+  enhanced?: number;
 };
 
 export type TranscriptSegment = {

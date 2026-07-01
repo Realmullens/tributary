@@ -37,6 +37,11 @@ export function wavTrackPath(trackId: string): string {
   return path.join(MEDIA_DIR, `${trackId}.wav`);
 }
 
+/** Noise-reduced + loudness-normalized voice track ("Magic Audio"-style). */
+export function enhancedWavPath(trackId: string): string {
+  return path.join(MEDIA_DIR, `${trackId}.enhanced.wav`);
+}
+
 export function exportPath(exportId: string, ext: string): string {
   return path.join(EXPORTS_DIR, `${exportId}.${ext}`);
 }
