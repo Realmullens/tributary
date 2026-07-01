@@ -8,9 +8,8 @@ import {
 } from "../lib/db.js";
 import { newId, requireUser } from "../lib/auth.js";
 import { newToken } from "../lib/ids.js";
-import { activeRecording, broadcast } from "../lib/rooms.js";
+import { startRecording, stopRecording } from "../lib/recording.js";
 import { sessionOwnedByUser } from "./studios.js";
-import { checkRecordingComplete } from "../jobs/pipeline.js";
 
 const joinSchema = z.object({ name: z.string().min(1).max(80) });
 
@@ -40,7 +39,12 @@ export function registerSessionRoutes(app: FastifyInstance): void {
     const exports = db
       .prepare("SELECT * FROM exports WHERE session_id = ? ORDER BY created_at DESC")
       .all(sessionId);
-    return { session, participants, recordings, tracks, exports };
+    const transcripts = db
+      .prepare(
+        "SELECT id, recording_id, status, language, error, created_at FROM transcripts WHERE session_id = ?"
+      )
+      .all(sessionId);
+    return { session, participants, recordings, tracks, exports, transcripts };
   });
 
   // ---- Host: join own session as a room participant ----
@@ -164,6 +168,23 @@ export function registerSessionRoutes(app: FastifyInstance): void {
     };
   });
 
+  // ---- Session settings (host only) ----
+  app.patch("/api/sessions/:sessionId", async (req, reply) => {
+    const user = requireUser(req, reply);
+    if (!user) return;
+    const { sessionId } = req.params as { sessionId: string };
+    const session = sessionOwnedByUser(sessionId, user.id);
+    if (!session) return reply.code(404).send({ error: "Session not found" });
+    const body = (req.body ?? {}) as { autoRecord?: boolean };
+    if (typeof body.autoRecord === "boolean") {
+      db.prepare("UPDATE sessions SET auto_record = ? WHERE id = ?").run(
+        body.autoRecord ? 1 : 0,
+        sessionId
+      );
+    }
+    return { ok: true };
+  });
+
   // ---- Recording control (host only) ----
   app.post("/api/sessions/:sessionId/recording/start", async (req, reply) => {
     const user = requireUser(req, reply);
@@ -171,26 +192,10 @@ export function registerSessionRoutes(app: FastifyInstance): void {
     const { sessionId } = req.params as { sessionId: string };
     const session = sessionOwnedByUser(sessionId, user.id);
     if (!session) return reply.code(404).send({ error: "Session not found" });
-    if (activeRecording(sessionId)) return reply.code(409).send({ error: "Already recording" });
-
-    const recording: RecordingRow = {
-      id: newId(),
-      session_id: sessionId,
-      started_at_ms: Date.now(),
-      stopped_at_ms: null,
-      status: "recording",
-    };
-    db.prepare(
-      "INSERT INTO recordings (id, session_id, started_at_ms, status) VALUES (?, ?, ?, ?)"
-    ).run(recording.id, recording.session_id, recording.started_at_ms, recording.status);
-    db.prepare("UPDATE sessions SET status = 'recording' WHERE id = ?").run(sessionId);
-
-    broadcast(sessionId, {
-      t: "recording-started",
-      recordingId: recording.id,
-      startedAtMs: recording.started_at_ms,
-    });
-    return { recording };
+    const body = (req.body ?? {}) as { countdownSeconds?: number };
+    const result = startRecording(sessionId, body.countdownSeconds ?? 3);
+    if (!result.ok) return reply.code(409).send({ error: result.error });
+    return result;
   });
 
   app.post("/api/sessions/:sessionId/recording/stop", async (req, reply) => {
@@ -199,18 +204,8 @@ export function registerSessionRoutes(app: FastifyInstance): void {
     const { sessionId } = req.params as { sessionId: string };
     const session = sessionOwnedByUser(sessionId, user.id);
     if (!session) return reply.code(404).send({ error: "Session not found" });
-    const recording = activeRecording(sessionId);
-    if (!recording) return reply.code(409).send({ error: "Not recording" });
-
-    const stoppedAtMs = Date.now();
-    db.prepare("UPDATE recordings SET stopped_at_ms = ?, status = 'uploading' WHERE id = ?").run(
-      stoppedAtMs,
-      recording.id
-    );
-    db.prepare("UPDATE sessions SET status = 'live' WHERE id = ?").run(sessionId);
-    broadcast(sessionId, { t: "recording-stopped", recordingId: recording.id, stoppedAtMs });
-    // In case no client ever created a track (e.g. record with zero devices), settle state.
-    setTimeout(() => checkRecordingComplete(recording.id), 5000);
+    const result = stopRecording(sessionId);
+    if (!result.ok) return reply.code(409).send({ error: result.error ?? "Not recording" });
     return { ok: true };
   });
 }

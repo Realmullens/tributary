@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type ParticipantInfo } from "./api";
 import { RecordingEngine, type QualityPreset } from "./recorder/recorder";
 import type { UploadHealth } from "./recorder/upload-manager";
-import { PeerManager, type RemoteMedia } from "./rtc/peers";
+import { fetchRtcConfig, PeerManager, type RemoteMedia } from "./rtc/peers";
 import { Signaling, type ChatMessage, type Peer, type PeerState } from "./rtc/signaling";
 
 export type RoomPeer = Peer & { media: RemoteMedia };
@@ -25,6 +25,8 @@ export function useRoom(config: RoomConfig) {
   const [camOn, setCamOn] = useState(true);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const [recording, setRecording] = useState<RecordingState>(null);
+  const [countdownEndsAt, setCountdownEndsAt] = useState<number | null>(null);
+  const [uploadsPaused, setUploadsPaused] = useState(false);
   const [myUpload, setMyUpload] = useState<UploadHealth | null>(null);
   const [connected, setConnected] = useState(false);
   const [replaced, setReplaced] = useState(false);
@@ -64,11 +66,18 @@ export function useRoom(config: RoomConfig) {
     });
     engineRef.current = engine;
 
+    const rtcConfigPromise = fetchRtcConfig();
     const signaling = new Signaling(config.token, {
-      onWelcome: (_self, existingPeers, activeRecording) => {
-        const pm = new PeerManager(signaling, config.participant.id, (pid, media) => {
-          updatePeer(pid, { media });
-        });
+      onWelcome: async (_self, existingPeers, activeRecording) => {
+        const rtcConfig = await rtcConfigPromise;
+        const pm = new PeerManager(
+          signaling,
+          config.participant.id,
+          (pid, media) => {
+            updatePeer(pid, { media });
+          },
+          rtcConfig
+        );
         peerManagerRef.current = pm;
         pm.setCameraStream(config.cameraStream);
         if (screenStreamRef.current) pm.setScreenStream(screenStreamRef.current);
@@ -109,6 +118,7 @@ export function useRoom(config: RoomConfig) {
       onPeerUpload: (participantId, health) => updatePeer(participantId, { upload: health }),
       onChat: (msg) => setChat((prev) => [...prev.slice(-199), msg]),
       onRecordingStarted: (recordingId, startedAtMs) => {
+        setCountdownEndsAt(null);
         beginLocalRecording(recordingId, startedAtMs);
       },
       onRecordingStopped: () => {
@@ -116,6 +126,8 @@ export function useRoom(config: RoomConfig) {
         recordingRef.current = null;
         setRecording(null);
       },
+      onRecordingCountdown: (_seconds, startsAtMs) => setCountdownEndsAt(startsAtMs),
+      onRecordingCountdownCancelled: () => setCountdownEndsAt(null),
       onReplaced: () => setReplaced(true),
       onConnectionChange: setConnected,
     });
@@ -245,6 +257,14 @@ export function useRoom(config: RoomConfig) {
     signalingRef.current?.sendChat(text);
   }, []);
 
+  const toggleUploadsPaused = useCallback(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    const next = !engine.isUploadsPaused;
+    engine.setUploadsPaused(next);
+    setUploadsPaused(next);
+  }, []);
+
   const peerList = useMemo(() => [...peers.values()], [peers]);
 
   return {
@@ -259,8 +279,11 @@ export function useRoom(config: RoomConfig) {
     startShare,
     stopShare,
     recording,
+    countdownEndsAt,
     startRecording,
     stopRecording,
+    uploadsPaused,
+    toggleUploadsPaused,
     myUpload,
     connected,
     replaced,

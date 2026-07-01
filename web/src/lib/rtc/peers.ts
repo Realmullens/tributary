@@ -10,14 +10,30 @@ type PeerConn = {
   polite: boolean;
   makingOffer: boolean;
   ignoreOffer: boolean;
+  /** Serializes signal processing so trickle candidates never race ahead of descriptions. */
+  signalQueue: Promise<void>;
   /** Remote's announced stream-id → kind mapping (camera vs screen). */
   remoteStreamKinds: Map<string, "camera" | "screen">;
   media: RemoteMedia;
 };
 
-const RTC_CONFIG: RTCConfiguration = {
+const FALLBACK_RTC_CONFIG: RTCConfiguration = {
   iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }],
 };
+
+/** Fetch ICE servers (STUN/TURN) from the server; falls back to public STUN. */
+export async function fetchRtcConfig(): Promise<RTCConfiguration> {
+  try {
+    const res = await fetch("/api/rtc-config");
+    const data = await res.json();
+    if (Array.isArray(data.iceServers) && data.iceServers.length > 0) {
+      return { iceServers: data.iceServers };
+    }
+  } catch {
+    // offline or server hiccup — STUN fallback below
+  }
+  return FALLBACK_RTC_CONFIG;
+}
 
 /**
  * Mesh WebRTC manager using the "perfect negotiation" pattern.
@@ -27,19 +43,24 @@ const RTC_CONFIG: RTCConfiguration = {
 export class PeerManager {
   private signaling: Signaling;
   private selfId: string;
+  private rtcConfig: RTCConfiguration;
   private peers = new Map<string, PeerConn>();
   private cameraStream: MediaStream | null = null;
   private screenStream: MediaStream | null = null;
   private onMediaChange: (participantId: string, media: RemoteMedia) => void;
+  private watchdogs = new Map<string, number>();
+  private rebuildAttempts = new Map<string, number>();
 
   constructor(
     signaling: Signaling,
     selfId: string,
-    onMediaChange: (participantId: string, media: RemoteMedia) => void
+    onMediaChange: (participantId: string, media: RemoteMedia) => void,
+    rtcConfig: RTCConfiguration = FALLBACK_RTC_CONFIG
   ) {
     this.signaling = signaling;
     this.selfId = selfId;
     this.onMediaChange = onMediaChange;
+    this.rtcConfig = rtcConfig;
   }
 
   setCameraStream(stream: MediaStream | null): void {
@@ -57,12 +78,13 @@ export class PeerManager {
   addPeer(participantId: string): void {
     if (this.peers.has(participantId)) return;
     const polite = this.selfId < participantId;
-    const pc = new RTCPeerConnection(RTC_CONFIG);
+    const pc = new RTCPeerConnection(this.rtcConfig);
     const conn: PeerConn = {
       pc,
       polite,
       makingOffer: false,
       ignoreOffer: false,
+      signalQueue: Promise.resolve(),
       remoteStreamKinds: new Map(),
       media: { camera: null, screen: null },
     };
@@ -104,23 +126,57 @@ export class PeerManager {
     };
 
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === "failed") {
+      if (pc.connectionState === "connected") {
+        this.clearWatchdog(participantId);
+        this.rebuildAttempts.delete(participantId);
+      } else if (pc.connectionState === "failed") {
         pc.restartIce();
+        this.armWatchdog(participantId);
       }
     };
 
     this.syncTracks(participantId);
     this.announceStreams(participantId);
+    this.armWatchdog(participantId);
+  }
+
+  /**
+   * ICE agents can stall (never gather, never leave "connecting"). If a peer
+   * hasn't connected within the window, tear the connection down and rebuild —
+   * the fresh offer lands on the remote's existing connection as an ICE restart.
+   */
+  private armWatchdog(participantId: string): void {
+    this.clearWatchdog(participantId);
+    const timer = window.setTimeout(() => {
+      const conn = this.peers.get(participantId);
+      if (!conn || conn.pc.connectionState === "connected") return;
+      const attempt = (this.rebuildAttempts.get(participantId) ?? 0) + 1;
+      if (attempt > 4) return; // give up; peer is likely truly unreachable
+      this.rebuildAttempts.set(participantId, attempt);
+      console.warn(`[rtc] connection to ${participantId} stalled (${conn.pc.connectionState}); rebuilding, attempt ${attempt}`);
+      this.removePeer(participantId);
+      this.addPeer(participantId);
+    }, 10_000);
+    this.watchdogs.set(participantId, timer);
+  }
+
+  private clearWatchdog(participantId: string): void {
+    const timer = this.watchdogs.get(participantId);
+    if (timer !== undefined) window.clearTimeout(timer);
+    this.watchdogs.delete(participantId);
   }
 
   removePeer(participantId: string): void {
+    this.clearWatchdog(participantId);
     const conn = this.peers.get(participantId);
     if (!conn) return;
     conn.pc.close();
     this.peers.delete(participantId);
+    this.onMediaChange(participantId, { camera: null, screen: null });
   }
 
   closeAll(): void {
+    for (const [id] of this.peers) this.clearWatchdog(id);
     for (const conn of this.peers.values()) conn.pc.close();
     this.peers.clear();
   }
@@ -161,13 +217,20 @@ export class PeerManager {
     else for (const [id] of this.peers) this.signaling.sendSignal(id, data);
   }
 
-  async handleSignal(from: string, data: any): Promise<void> {
+  handleSignal(from: string, data: any): void {
     let conn = this.peers.get(from);
     if (!conn) {
       this.addPeer(from);
       conn = this.peers.get(from)!;
     }
+    // Process strictly in arrival order: an offer/answer must be fully applied
+    // before the candidates that followed it on the wire are added.
+    conn.signalQueue = conn.signalQueue.then(() => this.processSignal(conn!, from, data));
+  }
+
+  private async processSignal(conn: PeerConn, from: string, data: any): Promise<void> {
     const { pc } = conn;
+    if (pc.connectionState === "closed") return;
 
     if (data.streamKinds) {
       conn.remoteStreamKinds = new Map(Object.entries(data.streamKinds) as ["camera" | "screen"][] & any);

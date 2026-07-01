@@ -102,9 +102,33 @@ CREATE TABLE IF NOT EXISTS exports (
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_studio ON sessions(studio_id);
+`);
+
+// Additive migrations for databases created before these columns existed.
+for (const migration of ["ALTER TABLE sessions ADD COLUMN auto_record INTEGER NOT NULL DEFAULT 0"]) {
+  try {
+    db.exec(migration);
+  } catch {
+    // column already exists
+  }
+}
+
+db.exec(`
 CREATE INDEX IF NOT EXISTS idx_participants_session ON participants(session_id);
 CREATE INDEX IF NOT EXISTS idx_tracks_recording ON tracks(recording_id);
 CREATE INDEX IF NOT EXISTS idx_recordings_session ON recordings(session_id);
+
+CREATE TABLE IF NOT EXISTS transcripts (
+  id TEXT PRIMARY KEY,
+  recording_id TEXT NOT NULL UNIQUE REFERENCES recordings(id) ON DELETE CASCADE,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'queued', -- queued | processing | ready | failed
+  language TEXT,
+  provider TEXT NOT NULL DEFAULT 'whisper.cpp',
+  segments_json TEXT,
+  error TEXT,
+  created_at INTEGER NOT NULL
+);
 `);
 
 export type UserRow = {
@@ -130,6 +154,7 @@ export type SessionRow = {
   invite_token: string;
   created_at: number;
   ended_at: number | null;
+  auto_record?: number;
 };
 
 export type ParticipantRow = {
@@ -166,6 +191,26 @@ export type TrackRow = {
   final_chunk_count: number | null;
   width: number | null;
   height: number | null;
+  error: string | null;
+  created_at: number;
+};
+
+export type TranscriptSegment = {
+  startMs: number;
+  endMs: number;
+  text: string;
+  speaker: string;
+  trackId: string;
+};
+
+export type TranscriptRow = {
+  id: string;
+  recording_id: string;
+  session_id: string;
+  status: string;
+  language: string | null;
+  provider: string;
+  segments_json: string | null;
   error: string | null;
   created_at: number;
 };

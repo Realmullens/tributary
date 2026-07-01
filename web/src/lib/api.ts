@@ -34,6 +34,7 @@ export type Session = {
   invite_token: string;
   created_at: number;
   ended_at: number | null;
+  auto_record?: number;
 };
 export type Recording = {
   id: string;
@@ -70,6 +71,21 @@ export type ExportItem = {
   duration_ms: number | null;
   error: string | null;
   created_at: number;
+};
+export type TranscriptSummary = {
+  id: string;
+  recording_id: string;
+  status: string;
+  language: string | null;
+  error: string | null;
+  created_at: number;
+};
+export type TranscriptSegment = {
+  startMs: number;
+  endMs: number;
+  text: string;
+  speaker: string;
+  trackId: string;
 };
 export type ParticipantInfo = { id: string; name: string; role: "host" | "guest" };
 export type SessionParticipant = {

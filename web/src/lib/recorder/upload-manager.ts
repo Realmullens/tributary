@@ -2,7 +2,7 @@ import { api } from "../api";
 import { chunkStore, type LocalTrackMeta } from "./chunk-store";
 
 export type UploadHealth = {
-  state: "recording" | "uploading" | "caught_up" | "delayed" | "complete" | "failed";
+  state: "recording" | "uploading" | "caught_up" | "delayed" | "paused" | "complete" | "failed";
   queuedChunks: number;
   uploadedBytes: number;
   totalBytes: number;
@@ -27,6 +27,7 @@ export class TrackUploader {
   private queue: number[] = [];
   private uploading = false;
   private stopped = false;
+  private paused = false;
   private backoffMs = 1000;
   private failures = 0;
   private uploadedBytes = 0;
@@ -110,11 +111,18 @@ export class TrackUploader {
     this.stopped = true;
   }
 
+  /** Pause/resume uploads (recording keeps writing chunks locally while paused). */
+  setPaused(paused: boolean): void {
+    this.paused = paused;
+    this.reportHealth();
+    if (!paused) void this.pump();
+  }
+
   private async pump(): Promise<void> {
-    if (this.uploading || this.stopped) return;
+    if (this.uploading || this.stopped || this.paused) return;
     this.uploading = true;
     try {
-      while (!this.stopped) {
+      while (!this.stopped && !this.paused) {
         if (!this.meta.serverTrackId) return; // wait for track registration
         const idx = this.queue[0];
         if (idx === undefined) {
@@ -183,7 +191,9 @@ export class TrackUploader {
     const done = this.meta.finalized;
     const state: UploadHealth["state"] = done
       ? "complete"
-      : this.failures >= 3
+      : this.paused
+        ? "paused"
+        : this.failures >= 3
         ? "delayed"
         : this.queue.length === 0
           ? this.recorderDone

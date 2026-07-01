@@ -85,7 +85,7 @@ export function Badge({
 export function statusTone(status: string): "gray" | "green" | "yellow" | "red" | "blue" {
   if (["ready", "complete", "caught_up"].includes(status)) return "green";
   if (["failed", "delayed"].includes(status)) return "red";
-  if (["processing", "uploading", "uploaded", "queued"].includes(status)) return "yellow";
+  if (["processing", "uploading", "uploaded", "queued", "paused"].includes(status)) return "yellow";
   if (["recording"].includes(status)) return "red";
   return "gray";
 }

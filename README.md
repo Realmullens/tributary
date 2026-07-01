@@ -10,13 +10,16 @@ participant — plus mixed exports — no matter how rough the live connection w
 
 - **Studios → sessions → invite links.** Hosts sign up; guests join with one link, no account.
 - **Lobby / device check** — camera preview, mic level meter, camera/mic pickers, quality preset
-  (720p / 1080p / audio-only), "I'm wearing headphones" echo-cancellation toggle.
+  (720p / 1080p / 4K / audio-only), "I'm wearing headphones" echo-cancellation toggle.
 - **Live studio room** — mesh WebRTC (host + up to ~5 guests), tiles with mute/camera state,
-  screen sharing, text chat, presence, reconnecting states.
-- **Local-first recording** — host hits Record; the server broadcasts an authoritative start
-  timestamp; each client records its own devices with `MediaRecorder` (3s chunks). Every chunk is
-  written to IndexedDB *before* upload, then uploaded with retry/backoff. Live-call quality and
-  recording quality are fully decoupled.
+  screen sharing, text chat, presence, reconnecting states, and a stall watchdog that rebuilds
+  peer connections whose ICE agent never comes up.
+- **Local-first recording** — host hits Record; a server-side countdown broadcasts to everyone,
+  then the server issues the authoritative start timestamp; each client records its own devices
+  with `MediaRecorder` (3s chunks). Every chunk is written to IndexedDB *before* upload, then
+  uploaded with retry/backoff. Live-call quality and recording quality are fully decoupled.
+  Optional **auto-record** starts the take when the first guest joins.
+- **Pause uploads** — defer bandwidth use on weak connections while local recording continues.
 - **Screen shares are their own recorded tracks**, start/stoppable mid-recording.
 - **Upload resilience** — idempotent chunk-by-index uploads, resume after refresh/offline, and a
   recovery banner that scans IndexedDB on any page load and finishes uploads from crashed tabs
@@ -26,8 +29,14 @@ participant — plus mixed exports — no matter how rough the live connection w
 - **Post-production pipeline (ffmpeg)** — chunks are assembled, probed, and delivered as:
   per-participant **MP4** (H.264/AAC) + **48kHz WAV** + original raw webm, and per-take
   **mixed grid MP4** and **mixed WAV** with per-track offset alignment.
+- **Transcription + captions** — per-track whisper.cpp transcription with **speaker labels from
+  the separate tracks** and offset-aligned timestamps; TXT / SRT / VTT downloads and an inline
+  transcript viewer. (Uses `whisper-cli` — `brew install whisper-cpp`; the model auto-downloads
+  on first use.)
 - **Session dashboard** — takes, participants, per-track status (chunk counts while uploading),
-  downloads, mixed exports, retry-processing.
+  downloads, mixed exports, transcripts, retry-processing, auto-record toggle.
+- **TURN-ready** — set `ICE_SERVERS` to add a TURN relay for guests behind strict NATs; see
+  [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for HTTPS + coturn recipes.
 
 ## Quick start
 
@@ -104,8 +113,10 @@ documented upgrade path for larger rooms.
 - Mesh topology tops out around 6 participants → LiveKit/SFU integration for 8–10.
 - Audio is Opus-in-WebM at capture; WAV is extracted server-side (true PCM capture via
   AudioWorklet is the planned upgrade, matching Riverside's plan-gated 48kHz WAV).
-- No transcription / text-based editing / clips yet (whisper + a timeline editor are the natural
-  next milestones — see `docs/SPEC.md` §2 for the full deferred list).
+- 4K preset depends on the camera/browser actually delivering 2160p and is encoder-heavy;
+  1080p is the recommended ceiling for most machines.
+- No text-based editing / timeline editor / AI clips yet — the natural next milestones now that
+  transcripts exist (see `docs/SPEC.md` §2 for the full deferred list).
 - Local-disk storage and in-process job queue — swap for S3 + a real queue to scale out.
 - Device switching is locked while recording.
 

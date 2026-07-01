@@ -22,6 +22,8 @@ export type SignalingEvents = {
   onChat: (msg: ChatMessage) => void;
   onRecordingStarted: (recordingId: string, startedAtMs: number) => void;
   onRecordingStopped: (recordingId: string, stoppedAtMs: number) => void;
+  onRecordingCountdown?: (seconds: number, startsAtMs: number) => void;
+  onRecordingCountdownCancelled?: () => void;
   onTrackStatus?: (trackId: string, status: string) => void;
   onExportStatus?: (exportId: string, status: string) => void;
   onReplaced?: () => void;
@@ -142,6 +144,12 @@ export class Signaling {
         break;
       case "recording-stopped":
         this.events.onRecordingStopped(msg.recordingId, msg.stoppedAtMs);
+        break;
+      case "recording-countdown":
+        this.events.onRecordingCountdown?.(msg.seconds, msg.startsAtMs);
+        break;
+      case "recording-countdown-cancelled":
+        this.events.onRecordingCountdownCancelled?.();
         break;
       case "track-status":
         this.events.onTrackStatus?.(msg.trackId, msg.status);

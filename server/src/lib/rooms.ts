@@ -1,5 +1,6 @@
 import type { WebSocket } from "ws";
 import { db, type ParticipantRow, type RecordingRow } from "./db.js";
+import { maybeAutoRecord } from "./recording.js";
 
 export type PeerState = { mic: boolean; cam: boolean; sharing: boolean };
 
@@ -84,7 +85,20 @@ export function addClient(participant: ParticipantRow, socket: WebSocket): Clien
     Date.now(),
     participant.id
   );
+  maybeAutoRecord(participant.session_id);
   return client;
+}
+
+/** How many hosts/guests are currently connected to a room. */
+export function roomComposition(sessionId: string): { hosts: number; guests: number } {
+  const r = rooms.get(sessionId);
+  let hosts = 0;
+  let guests = 0;
+  for (const client of r?.values() ?? []) {
+    if (client.role === "host") hosts++;
+    else guests++;
+  }
+  return { hosts, guests };
 }
 
 export function removeClient(client: Client): void {

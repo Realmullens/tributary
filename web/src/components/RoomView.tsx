@@ -43,6 +43,7 @@ export function RoomView({
   const room = useRoom(config);
   const [chatOpen, setChatOpen] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [countdownLeft, setCountdownLeft] = useState<number | null>(null);
 
   useEffect(() => {
     if (!room.recording) return;
@@ -50,6 +51,20 @@ export function RoomView({
     const timer = setInterval(() => setElapsedMs(Date.now() - started), 500);
     return () => clearInterval(timer);
   }, [room.recording]);
+
+  useEffect(() => {
+    if (!room.countdownEndsAt) {
+      setCountdownLeft(null);
+      return;
+    }
+    const tick = () => {
+      const left = Math.ceil((room.countdownEndsAt! - Date.now()) / 1000);
+      setCountdownLeft(left > 0 ? left : null);
+    };
+    tick();
+    const timer = setInterval(tick, 200);
+    return () => clearInterval(timer);
+  }, [room.countdownEndsAt]);
 
   const uploadsPending =
     room.myUpload !== null && room.myUpload.state !== "complete" && !room.recording;
@@ -172,10 +187,17 @@ export function RoomView({
           onClick={room.screenStream ? room.stopShare : () => void room.startShare()}
         />
         <ControlButton label={chatOpen ? "Hide chat" : "Chat"} onClick={() => setChatOpen((v) => !v)} />
+        {(room.recording || (room.myUpload && room.myUpload.state !== "complete")) && (
+          <ControlButton
+            label={room.uploadsPaused ? "Resume uploads" : "Pause uploads"}
+            active={!room.uploadsPaused}
+            onClick={room.toggleUploadsPaused}
+          />
+        )}
         {config.isHost &&
-          (room.recording ? (
+          (room.recording || countdownLeft !== null ? (
             <Button variant="rec" onClick={() => void room.stopRecording()}>
-              ■ Stop recording
+              ■ {countdownLeft !== null ? "Cancel" : "Stop recording"}
             </Button>
           ) : (
             <Button variant="rec" onClick={() => void room.startRecording()}>
@@ -184,6 +206,16 @@ export function RoomView({
           ))}
         <ControlButton label="Leave" danger onClick={leave} />
       </footer>
+
+      {/* Recording countdown overlay */}
+      {countdownLeft !== null && (
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="text-center">
+            <div className="text-[10rem] font-bold leading-none text-white drop-shadow-lg">{countdownLeft}</div>
+            <p className="mt-2 text-lg text-gray-200">Recording starts…</p>
+          </div>
+        </div>
+      )}
 
       {/* Post-stop upload overlay */}
       {uploadsPending && room.myUpload && (

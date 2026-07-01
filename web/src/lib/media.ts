@@ -27,13 +27,19 @@ export type CaptureSettings = {
 };
 
 export function buildConstraints(settings: CaptureSettings): MediaStreamConstraints {
+  const dims =
+    settings.preset === "ultra"
+      ? { width: 3840, height: 2160 }
+      : settings.preset === "high"
+        ? { width: 1920, height: 1080 }
+        : { width: 1280, height: 720 };
   const video: MediaTrackConstraints | boolean =
     settings.preset === "audio"
       ? false
       : {
           ...(settings.cameraId ? { deviceId: { exact: settings.cameraId } } : {}),
-          width: { ideal: settings.preset === "high" ? 1920 : 1280 },
-          height: { ideal: settings.preset === "high" ? 1080 : 720 },
+          width: { ideal: dims.width },
+          height: { ideal: dims.height },
           frameRate: { ideal: 30 },
         };
   const audio: MediaTrackConstraints = {

@@ -7,10 +7,41 @@ import {
   type Session,
   type SessionParticipant,
   type Track,
+  type TranscriptSegment,
+  type TranscriptSummary,
 } from "../lib/api";
 import { Badge, Button, Card, formatBytes, formatDuration, statusTone } from "../components/ui";
 
 const ACTIVE_STATES = ["recording", "uploading", "uploaded", "processing", "queued"];
+
+function TranscriptViewer({ recordingId }: { recordingId: string }) {
+  const [segments, setSegments] = useState<TranscriptSegment[] | null>(null);
+
+  useEffect(() => {
+    api<{ transcript: { segments: TranscriptSegment[] } }>(
+      `/api/recordings/${recordingId}/transcript`
+    )
+      .then((res) => setSegments(res.transcript.segments))
+      .catch(() => setSegments([]));
+  }, [recordingId]);
+
+  if (!segments) return <p className="text-xs text-gray-500">Loading transcript…</p>;
+  return (
+    <div className="max-h-72 overflow-y-auto rounded-lg bg-panel-2 p-3 text-sm">
+      {segments.map((seg, i) => (
+        <div key={i} className="mb-1.5 flex gap-3">
+          <span className="w-14 shrink-0 text-xs tabular-nums text-gray-500">
+            {formatDuration(seg.startMs)}
+          </span>
+          <span>
+            <span className="font-medium text-blue-300">{seg.speaker}: </span>
+            <span className="text-gray-200">{seg.text}</span>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function SessionDetailPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -19,6 +50,8 @@ export function SessionDetailPage() {
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [exports, setExports] = useState<ExportItem[]>([]);
+  const [transcripts, setTranscripts] = useState<TranscriptSummary[]>([]);
+  const [openTranscripts, setOpenTranscripts] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     const res = await api<{
@@ -27,12 +60,14 @@ export function SessionDetailPage() {
       recordings: Recording[];
       tracks: Track[];
       exports: ExportItem[];
+      transcripts: TranscriptSummary[];
     }>(`/api/sessions/${sessionId}`);
     setSession(res.session);
     setParticipants(res.participants);
     setRecordings(res.recordings);
     setTracks(res.tracks);
     setExports(res.exports);
+    setTranscripts(res.transcripts ?? []);
   }, [sessionId]);
 
   useEffect(() => {
@@ -43,7 +78,8 @@ export function SessionDetailPage() {
   const anythingActive =
     tracks.some((t) => ACTIVE_STATES.includes(t.status)) ||
     exports.some((e) => ACTIVE_STATES.includes(e.status)) ||
-    recordings.some((r) => ACTIVE_STATES.includes(r.status));
+    recordings.some((r) => ACTIVE_STATES.includes(r.status)) ||
+    transcripts.some((t) => ACTIVE_STATES.includes(t.status));
   useEffect(() => {
     if (!anythingActive) return;
     const timer = setInterval(() => void load(), 4000);
@@ -88,6 +124,19 @@ export function SessionDetailPage() {
         </div>
       </div>
 
+      <label className="mt-4 flex items-center gap-2 text-sm text-gray-300">
+        <input
+          type="checkbox"
+          checked={Boolean(session.auto_record)}
+          onChange={async (e) => {
+            await api(`/api/sessions/${session.id}`, { method: "PATCH", body: { autoRecord: e.target.checked } });
+            await load();
+          }}
+          className="h-4 w-4 accent-[#4f7cff]"
+        />
+        Auto-record when the first guest joins (3s countdown)
+      </label>
+
       {participants.length > 0 && (
         <Card className="mt-6">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-400">Participants</h2>
@@ -114,6 +163,8 @@ export function SessionDetailPage() {
         const recTracks = tracks.filter((t) => t.recording_id === recording.id);
         const recExports = exports.filter((e) => e.recording_id === recording.id);
         const readyTracks = recTracks.filter((t) => t.status === "ready");
+        const transcript = transcripts.find((t) => t.recording_id === recording.id);
+        const transcriptOpen = openTranscripts.has(recording.id);
         return (
           <Card key={recording.id} className="mt-6">
             <div className="flex items-center justify-between">
@@ -196,8 +247,8 @@ export function SessionDetailPage() {
               </table>
             </div>
 
-            {/* Exports */}
-            <div className="mt-4 flex items-center gap-2">
+            {/* Exports + transcription */}
+            <div className="mt-4 flex flex-wrap items-center gap-2">
               <Button
                 variant="ghost"
                 disabled={readyTracks.length === 0}
@@ -212,7 +263,53 @@ export function SessionDetailPage() {
               >
                 Create mixed audio
               </Button>
+              <Button
+                variant="ghost"
+                disabled={readyTracks.length === 0 || ["queued", "processing"].includes(transcript?.status ?? "")}
+                onClick={async () => {
+                  await api(`/api/recordings/${recording.id}/transcribe`, { body: {} });
+                  await load();
+                }}
+              >
+                {transcript ? "Re-transcribe" : "Transcribe"}
+              </Button>
+              {transcript && (
+                <span className="flex items-center gap-2">
+                  <Badge tone={statusTone(transcript.status)}>transcript: {transcript.status}</Badge>
+                  {transcript.status === "failed" && transcript.error && (
+                    <span className="text-xs text-rec" title={transcript.error}>error</span>
+                  )}
+                </span>
+              )}
             </div>
+            {transcript?.status === "ready" && (
+              <div className="mt-3">
+                <div className="flex items-center gap-3 text-xs">
+                  <button
+                    className="text-blue-300 hover:underline"
+                    onClick={() =>
+                      setOpenTranscripts((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(recording.id)) next.delete(recording.id);
+                        else next.add(recording.id);
+                        return next;
+                      })
+                    }
+                  >
+                    {transcriptOpen ? "Hide transcript" : "Show transcript"}
+                  </button>
+                  <a className="text-blue-300 hover:underline" href={`/api/recordings/${recording.id}/transcript/download?format=txt`}>TXT</a>
+                  <a className="text-blue-300 hover:underline" href={`/api/recordings/${recording.id}/transcript/download?format=srt`}>SRT</a>
+                  <a className="text-blue-300 hover:underline" href={`/api/recordings/${recording.id}/transcript/download?format=vtt`}>VTT</a>
+                  {transcript.language && <span className="text-gray-500">language: {transcript.language}</span>}
+                </div>
+                {transcriptOpen && (
+                  <div className="mt-2">
+                    <TranscriptViewer recordingId={recording.id} />
+                  </div>
+                )}
+              </div>
+            )}
             {recExports.length > 0 && (
               <div className="mt-3 flex flex-col gap-2">
                 {recExports.map((exp) => (

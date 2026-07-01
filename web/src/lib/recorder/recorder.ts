@@ -21,7 +21,7 @@ export function pickMimeType(hasVideo: boolean): string | null {
   return null;
 }
 
-export type QualityPreset = "standard" | "high" | "audio";
+export type QualityPreset = "standard" | "high" | "ultra" | "audio";
 
 export function recorderBitrates(preset: QualityPreset): {
   videoBitsPerSecond?: number;
@@ -30,6 +30,8 @@ export function recorderBitrates(preset: QualityPreset): {
   switch (preset) {
     case "high":
       return { videoBitsPerSecond: 8_000_000, audioBitsPerSecond: 128_000 };
+    case "ultra": // 4K, device permitting — expect ~7× the upload volume of standard
+      return { videoBitsPerSecond: 35_000_000, audioBitsPerSecond: 128_000 };
     case "audio":
       return { audioBitsPerSecond: 128_000 };
     default:
@@ -63,9 +65,20 @@ export class RecordingEngine {
   private opts: EngineOptions;
   private active = new Map<string, ActiveTrack>();
   private healths = new Map<string, UploadHealth>();
+  private uploadsPaused = false;
 
   constructor(opts: EngineOptions) {
     this.opts = opts;
+  }
+
+  /** Defer uploads on constrained bandwidth; local recording continues untouched. */
+  setUploadsPaused(paused: boolean): void {
+    this.uploadsPaused = paused;
+    for (const entry of this.active.values()) entry.uploader.setPaused(paused);
+  }
+
+  get isUploadsPaused(): boolean {
+    return this.uploadsPaused;
   }
 
   get isRecording(): boolean {
@@ -116,6 +129,7 @@ export class RecordingEngine {
       onComplete: () => this.emitAggregate(),
     });
 
+    if (this.uploadsPaused) uploader.setPaused(true);
     const bitrates = recorderBitrates(hasVideo ? this.opts.preset : "audio");
     const recorder = new MediaRecorder(stream, { mimeType, ...bitrates });
     const entry: ActiveTrack = {
@@ -213,7 +227,7 @@ export class RecordingEngine {
     const uploadedBytes = healths.reduce((s, h) => s + h.uploadedBytes, 0);
     const totalBytes = healths.reduce((s, h) => s + h.totalBytes, 0);
     const queuedChunks = healths.reduce((s, h) => s + h.queuedChunks, 0);
-    const order: UploadHealth["state"][] = ["failed", "delayed", "uploading", "recording", "caught_up", "complete"];
+    const order: UploadHealth["state"][] = ["failed", "delayed", "paused", "uploading", "recording", "caught_up", "complete"];
     const state = order.find((s) => healths.some((h) => h.state === s)) ?? "complete";
     return {
       state,

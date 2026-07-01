@@ -1,9 +1,17 @@
 import type { FastifyInstance } from "fastify";
 import fs from "node:fs";
-import { db, type ExportRow, type RecordingRow, type TrackRow } from "../lib/db.js";
+import {
+  db,
+  type ExportRow,
+  type RecordingRow,
+  type TrackRow,
+  type TranscriptRow,
+  type TranscriptSegment,
+} from "../lib/db.js";
 import { newId, requireUser } from "../lib/auth.js";
 import { exportPath, mp4TrackPath, rawTrackPath, wavTrackPath } from "../lib/storage.js";
 import { queueMixedExport, reprocessTrack } from "../jobs/pipeline.js";
+import { queueTranscription, renderTranscript } from "../jobs/transcribe.js";
 
 function trackOwnedByUser(trackId: string, userId: string): (TrackRow & { participant_name: string }) | null {
   const row = db
@@ -117,6 +125,69 @@ export function registerMediaRoutes(app: FastifyInstance): void {
     );
     queueMixedExport(exportRow);
     return { export: exportRow };
+  });
+
+  // ---- Transcription ----
+  const recordingOwnedByUser = (recordingId: string, userId: string): RecordingRow | null =>
+    (db
+      .prepare(
+        `SELECT r.* FROM recordings r
+         JOIN sessions s ON s.id = r.session_id
+         JOIN studios st ON st.id = s.studio_id
+         WHERE r.id = ? AND st.user_id = ?`
+      )
+      .get(recordingId, userId) as RecordingRow | undefined) ?? null;
+
+  app.post("/api/recordings/:recordingId/transcribe", async (req, reply) => {
+    const user = requireUser(req, reply);
+    if (!user) return;
+    const { recordingId } = req.params as { recordingId: string };
+    const recording = recordingOwnedByUser(recordingId, user.id);
+    if (!recording) return reply.code(404).send({ error: "Recording not found" });
+    const transcript = queueTranscription(recordingId, recording.session_id);
+    return { transcript };
+  });
+
+  app.get("/api/recordings/:recordingId/transcript", async (req, reply) => {
+    const user = requireUser(req, reply);
+    if (!user) return;
+    const { recordingId } = req.params as { recordingId: string };
+    if (!recordingOwnedByUser(recordingId, user.id)) {
+      return reply.code(404).send({ error: "Recording not found" });
+    }
+    const transcript = db
+      .prepare("SELECT * FROM transcripts WHERE recording_id = ?")
+      .get(recordingId) as TranscriptRow | undefined;
+    if (!transcript) return reply.code(404).send({ error: "No transcript" });
+    return {
+      transcript: {
+        ...transcript,
+        segments: transcript.segments_json ? JSON.parse(transcript.segments_json) : [],
+        segments_json: undefined,
+      },
+    };
+  });
+
+  app.get("/api/recordings/:recordingId/transcript/download", async (req, reply) => {
+    const user = requireUser(req, reply);
+    if (!user) return;
+    const { recordingId } = req.params as { recordingId: string };
+    const { format } = req.query as { format?: string };
+    if (!recordingOwnedByUser(recordingId, user.id)) {
+      return reply.code(404).send({ error: "Recording not found" });
+    }
+    const transcript = db
+      .prepare("SELECT * FROM transcripts WHERE recording_id = ? AND status = 'ready'")
+      .get(recordingId) as TranscriptRow | undefined;
+    if (!transcript?.segments_json) return reply.code(404).send({ error: "Transcript not ready" });
+
+    const segments = JSON.parse(transcript.segments_json) as TranscriptSegment[];
+    const fmt = format === "srt" ? "srt" : format === "vtt" ? "vtt" : "txt";
+    const body = renderTranscript(segments, fmt);
+    const contentTypes = { txt: "text/plain", srt: "application/x-subrip", vtt: "text/vtt" };
+    reply.header("Content-Type", `${contentTypes[fmt]}; charset=utf-8`);
+    reply.header("Content-Disposition", `attachment; filename="transcript-${recordingId.slice(0, 6)}.${fmt}"`);
+    return reply.send(body);
   });
 
   app.get("/api/exports/:exportId/download", async (req, reply) => {

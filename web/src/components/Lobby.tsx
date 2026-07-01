@@ -151,6 +151,7 @@ export function Lobby({
                 options={[
                   { value: "standard", label: "Standard — 720p" },
                   { value: "high", label: "High — 1080p" },
+                  { value: "ultra", label: "Ultra — 4K (device permitting)" },
                   { value: "audio", label: "Audio only" },
                 ]}
               />
