@@ -54,6 +54,10 @@ participant — plus mixed exports — no matter how rough the live connection w
   when your ffmpeg has libass.
 - **TURN-ready** — set `ICE_SERVERS` to add a TURN relay for guests behind strict NATs; see
   [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for HTTPS + coturn recipes.
+- **AI-agent CLI** — `tributary` exposes the whole post-production surface (transcripts,
+  word timestamps, cuts, clips, downloads) as JSON commands, so any agent — Claude Code,
+  Codex, a script — can be the AI layer: highlight clips, filler-word removal, show notes.
+  See [`docs/AI-AGENTS.md`](docs/AI-AGENTS.md). Tributary itself ships no LLM dependency.
 
 ## Quick start
 
@@ -73,6 +77,14 @@ Production-style single process (server serves the built SPA):
 ```bash
 pnpm build
 pnpm start        # everything on :4100
+```
+
+CLI (for you or your AI agents):
+
+```bash
+ln -s "$(pwd)/cli/tributary.mjs" /usr/local/bin/tributary
+tributary login --email you@example.com --password '…'
+tributary help
 ```
 
 > **HTTPS note:** browsers require a secure context for camera/mic. `localhost` is fine for

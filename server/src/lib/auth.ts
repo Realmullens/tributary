@@ -46,7 +46,10 @@ export function clearSessionCookie(reply: FastifyReply): void {
 }
 
 export function userFromRequest(req: FastifyRequest): UserRow | null {
-  const token = req.cookies?.[SESSION_COOKIE];
+  // Browser sessions use the cookie; CLI/agents send the same token as a bearer.
+  const header = req.headers.authorization;
+  const bearer = header?.startsWith("Bearer ") ? header.slice(7) : null;
+  const token = req.cookies?.[SESSION_COOKIE] ?? bearer;
   if (!token) return null;
   const row = db
     .prepare(

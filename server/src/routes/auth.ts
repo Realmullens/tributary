@@ -60,8 +60,10 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     if (!user || !verifyPassword(parsed.data.password, user.password_hash)) {
       return reply.code(401).send({ error: "Incorrect email or password" });
     }
-    setSessionCookie(reply, createAuthToken(user.id));
-    return { user: publicUser(user) };
+    const token = createAuthToken(user.id);
+    setSessionCookie(reply, token);
+    // token in the body lets CLI/agents authenticate with Authorization: Bearer
+    return { user: publicUser(user), token };
   });
 
   app.post("/api/auth/logout", async (req, reply) => {

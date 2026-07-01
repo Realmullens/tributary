@@ -1,0 +1,12 @@
+{
+  "name": "@tributary/cli",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "tributary": "./tributary.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
