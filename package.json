@@ -1,0 +1,24 @@
+{
+  "name": "tributary",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Tributary — open-source remote recording studio (Riverside-style): local per-participant recording, progressive resumable upload, separate tracks, ffmpeg post-production.",
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,green \"pnpm --filter @tributary/server dev\" \"pnpm --filter @tributary/web dev\"",
+    "build": "pnpm --filter @tributary/server build && pnpm --filter @tributary/web build",
+    "start": "NODE_ENV=production node server/dist/index.js",
+    "typecheck": "pnpm --filter @tributary/server typecheck && pnpm --filter @tributary/web typecheck"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild"
+    ]
+  }
+}
