@@ -1,5 +1,11 @@
 import fs from "node:fs";
-import { db, type ExportRow, type RecordingRow, type TrackRow } from "../lib/db.js";
+import {
+  db,
+  type ExportParams,
+  type ExportRow,
+  type RecordingRow,
+  type TrackRow,
+} from "../lib/db.js";
 import {
   chunkPath,
   exportPath,
@@ -15,8 +21,42 @@ import {
   rawPcmToWav,
   toMp4,
   toWav,
+  type KeepWindow,
   type MixInput,
 } from "./ffmpeg.js";
+
+/** Turn trim + cut params into ordered keep windows; undefined = no editing. */
+export function computeKeepWindows(
+  params: ExportParams,
+  totalDurationMs: number
+): KeepWindow[] | undefined {
+  const clamp = (v: number) => Math.max(0, Math.min(totalDurationMs, Math.round(v)));
+  const trimStart = clamp(params.trimStartMs ?? 0);
+  const trimEnd = clamp(params.trimEndMs ?? totalDurationMs);
+  if (trimEnd <= trimStart) return undefined;
+
+  const cuts = (params.cuts ?? [])
+    .map((c) => ({ startMs: clamp(c.startMs), endMs: clamp(c.endMs) }))
+    .filter((c) => c.endMs > c.startMs)
+    .sort((a, b) => a.startMs - b.startMs);
+
+  const windows: KeepWindow[] = [];
+  let cursor = trimStart;
+  for (const cut of cuts) {
+    if (cut.endMs <= cursor) continue;
+    if (cut.startMs > cursor) windows.push({ startMs: cursor, endMs: Math.min(cut.startMs, trimEnd) });
+    cursor = Math.max(cursor, cut.endMs);
+    if (cursor >= trimEnd) break;
+  }
+  if (cursor < trimEnd) windows.push({ startMs: cursor, endMs: trimEnd });
+
+  const usable = windows.filter((w) => w.endMs - w.startMs > 50);
+  if (usable.length === 0) return undefined;
+  if (usable.length === 1 && usable[0].startMs === 0 && usable[0].endMs === totalDurationMs) {
+    return undefined; // full range — nothing to edit
+  }
+  return usable;
+}
 
 // ---- Tiny in-process job queue (concurrency 2) ----
 
@@ -227,16 +267,22 @@ async function renderExport(exportId: string): Promise<void> {
     }
     if (inputs.length === 0 || totalDurationMs === 0) throw new Error("No usable track files");
 
+    const params: ExportParams = exp.params_json ? JSON.parse(exp.params_json) : {};
+    const keepWindows = computeKeepWindows(params, totalDurationMs);
+    const outputDurationMs = keepWindows
+      ? keepWindows.reduce((s, w) => s + (w.endMs - w.startMs), 0)
+      : totalDurationMs;
+
     const outPath = exportPath(exportId, exp.format);
     if (exp.type === "mixed_video") {
-      await mixedVideoExport(inputs, outPath, totalDurationMs);
+      await mixedVideoExport(inputs, outPath, totalDurationMs, keepWindows);
     } else {
-      await mixedAudioExport(inputs, outPath, totalDurationMs);
+      await mixedAudioExport(inputs, outPath, totalDurationMs, keepWindows);
     }
     const size = fs.statSync(outPath).size;
     db.prepare(
       "UPDATE exports SET status = 'ready', size_bytes = ?, duration_ms = ?, error = NULL WHERE id = ?"
-    ).run(size, totalDurationMs, exportId);
+    ).run(size, outputDurationMs, exportId);
     broadcast(exp.session_id, { t: "export-status", exportId, status: "ready" });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

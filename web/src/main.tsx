@@ -6,6 +6,7 @@ import { AuthPage } from "./pages/AuthPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { StudioPage } from "./pages/StudioPage";
 import { SessionDetailPage } from "./pages/SessionDetailPage";
+import { EditorPage } from "./pages/EditorPage";
 import { HostRoomPage } from "./pages/HostRoomPage";
 import { JoinPage } from "./pages/JoinPage";
 import { RecoveryBanner } from "./components/RecoveryBanner";
@@ -44,6 +45,7 @@ function App() {
             <Route path="/studios/:studioId" element={<StudioPage />} />
             <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
             <Route path="/sessions/:sessionId/room" element={<HostRoomPage />} />
+            <Route path="/recordings/:recordingId/edit" element={<EditorPage />} />
           </>
         ) : (
           <Route path="*" element={<Navigate to="/auth" replace />} />

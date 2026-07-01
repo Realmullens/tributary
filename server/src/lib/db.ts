@@ -110,6 +110,7 @@ for (const migration of [
   "ALTER TABLE sessions ADD COLUMN waiting_room INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE sessions ADD COLUMN teleprompter_script TEXT",
   "ALTER TABLE participants ADD COLUMN admitted_at INTEGER",
+  "ALTER TABLE exports ADD COLUMN params_json TEXT",
 ]) {
   try {
     db.exec(migration);
@@ -223,6 +224,13 @@ export type TranscriptRow = {
   created_at: number;
 };
 
+export type ExportParams = {
+  trimStartMs?: number;
+  trimEndMs?: number;
+  /** Ranges (ms, timeline time) removed from the middle of the recording. */
+  cuts?: { startMs: number; endMs: number }[];
+};
+
 export type ExportRow = {
   id: string;
   session_id: string;
@@ -234,4 +242,5 @@ export type ExportRow = {
   duration_ms: number | null;
   error: string | null;
   created_at: number;
+  params_json?: string | null;
 };

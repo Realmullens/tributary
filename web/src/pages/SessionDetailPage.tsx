@@ -296,13 +296,18 @@ export function SessionDetailPage() {
                 </span>
               )}
               {readyTracks.length > 0 && (
-                <a
-                  className="text-xs text-blue-300 hover:underline"
-                  href={`/api/recordings/${recording.id}/xml`}
-                  title="Premiere/Resolve-compatible timeline. Put it in the same folder as the downloaded MP4/WAV tracks."
-                >
-                  Premiere/FCP XML
-                </a>
+                <>
+                  <Link to={`/recordings/${recording.id}/edit`}>
+                    <Button variant="ghost">Open editor</Button>
+                  </Link>
+                  <a
+                    className="text-xs text-blue-300 hover:underline"
+                    href={`/api/recordings/${recording.id}/xml`}
+                    title="Premiere/Resolve-compatible timeline. Put it in the same folder as the downloaded MP4/WAV tracks."
+                  >
+                    Premiere/FCP XML
+                  </a>
+                </>
               )}
             </div>
             {transcript?.status === "ready" && (

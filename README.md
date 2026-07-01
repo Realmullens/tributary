@@ -45,6 +45,9 @@ participant — plus mixed exports — no matter how rough the live connection w
   downloads, mixed exports, transcripts, retry-processing, auto-record and waiting-room toggles.
 - **Premiere/FCP XML export** — one click gives you an xmeml timeline that drops the downloaded
   MP4/WAV tracks onto synced tracks in Premiere Pro or DaVinci Resolve, offsets applied.
+- **Editor** — per-recording editor with synced multi-track preview, click-to-seek timeline,
+  trim + cut ranges, and a transcript rail (click a line to jump there; cut lines get struck
+  through). Edits render server-side into new mixed exports — non-destructive throughout.
 - **TURN-ready** — set `ICE_SERVERS` to add a TURN relay for guests behind strict NATs; see
   [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for HTTPS + coturn recipes.
 
@@ -123,8 +126,8 @@ documented upgrade path for larger rooms.
 - Mesh topology tops out around 6 participants → LiveKit/SFU integration for 8–10.
 - 4K preset depends on the camera/browser actually delivering 2160p and is encoder-heavy;
   1080p is the recommended ceiling for most machines.
-- No text-based editing / timeline editor / AI clips yet — the natural next milestones now that
-  transcripts exist (see `docs/SPEC.md` §2 for the full deferred list).
+- Editor covers trim/cuts/transcript-seek; word-level text editing, layout switching, and AI
+  clips are the next tier (see `docs/SPEC.md` §2 for the full deferred list).
 - Local-disk storage and in-process job queue — swap for S3 + a real queue to scale out.
 - Device switching is locked while recording.
 

@@ -30,18 +30,40 @@ function trackOwnedByUser(trackId: string, userId: string): (TrackRow & { partic
 
 
 function streamFile(
+  req: any,
   reply: any,
   filePath: string,
   downloadName: string,
-  contentType: string
+  contentType: string,
+  inline = false
 ): unknown {
   if (!fs.existsSync(filePath)) {
     return reply.code(404).send({ error: "File not available yet" });
   }
   const stat = fs.statSync(filePath);
   reply.header("Content-Type", contentType);
+  reply.header("Accept-Ranges", "bytes");
+  if (!inline) {
+    reply.header("Content-Disposition", `attachment; filename="${downloadName}"`);
+  }
+
+  // Range support so <video> preview elements can seek.
+  const range = typeof req.headers?.range === "string" ? req.headers.range : null;
+  const match = range?.match(/^bytes=(\d*)-(\d*)$/);
+  if (match && (match[1] || match[2])) {
+    const start = match[1] ? parseInt(match[1], 10) : Math.max(0, stat.size - parseInt(match[2], 10));
+    const end = match[1] && match[2] ? Math.min(parseInt(match[2], 10), stat.size - 1) : stat.size - 1;
+    if (start >= stat.size || start > end) {
+      reply.header("Content-Range", `bytes */${stat.size}`);
+      return reply.code(416).send();
+    }
+    reply.code(206);
+    reply.header("Content-Range", `bytes ${start}-${end}/${stat.size}`);
+    reply.header("Content-Length", end - start + 1);
+    return reply.send(fs.createReadStream(filePath, { start, end }));
+  }
+
   reply.header("Content-Length", stat.size);
-  reply.header("Content-Disposition", `attachment; filename="${downloadName}"`);
   return reply.send(fs.createReadStream(filePath));
 }
 
@@ -62,14 +84,15 @@ export function registerMediaRoutes(app: FastifyInstance): void {
           : track.mime_type.includes("mp4")
             ? "mp4"
             : "webm";
-        return streamFile(reply, rawTrackPath(trackId, ext), `${base}.raw.${ext}`,
+        return streamFile(req, reply, rawTrackPath(trackId, ext), `${base}.raw.${ext}`,
           track.mime_type.split(";")[0] || "video/webm");
       }
       case "wav":
-        return streamFile(reply, wavTrackPath(trackId), `${base}.wav`, "audio/wav");
+        return streamFile(req, reply, wavTrackPath(trackId), `${base}.wav`, "audio/wav");
       case "mp4":
       default:
-        return streamFile(reply, mp4TrackPath(trackId), `${base}.mp4`, "video/mp4");
+        return streamFile(req, reply, mp4TrackPath(trackId), `${base}.mp4`, "video/mp4",
+          (req.query as { inline?: string }).inline === "1");
     }
   });
 
@@ -89,8 +112,28 @@ export function registerMediaRoutes(app: FastifyInstance): void {
     const user = requireUser(req, reply);
     if (!user) return;
     const { recordingId } = req.params as { recordingId: string };
-    const body = (req.body ?? {}) as { type?: string };
+    const body = (req.body ?? {}) as {
+      type?: string;
+      trimStartMs?: number;
+      trimEndMs?: number;
+      cuts?: { startMs: number; endMs: number }[];
+    };
     const type = body.type === "mixed_audio" ? "mixed_audio" : "mixed_video";
+
+    // Optional edit decision list from the editor
+    let paramsJson: string | null = null;
+    const cuts = Array.isArray(body.cuts)
+      ? body.cuts
+          .filter((c) => Number.isFinite(c?.startMs) && Number.isFinite(c?.endMs))
+          .map((c) => ({ startMs: Math.round(c.startMs), endMs: Math.round(c.endMs) }))
+      : [];
+    if (Number.isFinite(body.trimStartMs) || Number.isFinite(body.trimEndMs) || cuts.length > 0) {
+      paramsJson = JSON.stringify({
+        trimStartMs: Number.isFinite(body.trimStartMs) ? Math.round(body.trimStartMs!) : undefined,
+        trimEndMs: Number.isFinite(body.trimEndMs) ? Math.round(body.trimEndMs!) : undefined,
+        cuts,
+      });
+    }
 
     const recording = db
       .prepare(
@@ -113,10 +156,11 @@ export function registerMediaRoutes(app: FastifyInstance): void {
       duration_ms: null,
       error: null,
       created_at: Date.now(),
+      params_json: paramsJson,
     };
     db.prepare(
-      `INSERT INTO exports (id, session_id, recording_id, type, status, format, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO exports (id, session_id, recording_id, type, status, format, created_at, params_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       exportRow.id,
       exportRow.session_id,
@@ -124,10 +168,43 @@ export function registerMediaRoutes(app: FastifyInstance): void {
       exportRow.type,
       exportRow.status,
       exportRow.format,
-      exportRow.created_at
+      exportRow.created_at,
+      exportRow.params_json
     );
     queueMixedExport(exportRow);
     return { export: exportRow };
+  });
+
+  // Editor data: recording + ready tracks + transcript in one call.
+  app.get("/api/recordings/:recordingId", async (req, reply) => {
+    const user = requireUser(req, reply);
+    if (!user) return;
+    const { recordingId } = req.params as { recordingId: string };
+    const recording = db
+      .prepare(
+        `SELECT r.*, s.title AS session_title, s.id AS session_id FROM recordings r
+         JOIN sessions s ON s.id = r.session_id
+         JOIN studios st ON st.id = s.studio_id
+         WHERE r.id = ? AND st.user_id = ?`
+      )
+      .get(recordingId, user.id) as (RecordingRow & { session_title: string }) | undefined;
+    if (!recording) return reply.code(404).send({ error: "Recording not found" });
+
+    const tracks = db
+      .prepare(
+        `SELECT t.*, p.name AS participant_name FROM tracks t
+         JOIN participants p ON p.id = t.participant_id
+         WHERE t.recording_id = ? ORDER BY t.created_at ASC`
+      )
+      .all(recordingId);
+    const transcript = db
+      .prepare("SELECT segments_json FROM transcripts WHERE recording_id = ? AND status = 'ready'")
+      .get(recordingId) as { segments_json: string | null } | undefined;
+    return {
+      recording,
+      tracks,
+      transcriptSegments: transcript?.segments_json ? JSON.parse(transcript.segments_json) : null,
+    };
   });
 
   // ---- Transcription ----
@@ -238,6 +315,6 @@ export function registerMediaRoutes(app: FastifyInstance): void {
       .get(exportId, user.id) as ExportRow | undefined;
     if (!exp) return reply.code(404).send({ error: "Export not found" });
     const contentType = exp.format === "mp4" ? "video/mp4" : "audio/wav";
-    return streamFile(reply, exportPath(exportId, exp.format), `mixed-${exp.type}-${exportId.slice(0, 6)}.${exp.format}`, contentType);
+    return streamFile(req, reply, exportPath(exportId, exp.format), `mixed-${exp.type}-${exportId.slice(0, 6)}.${exp.format}`, contentType);
   });
 }
