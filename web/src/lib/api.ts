@@ -25,7 +25,21 @@ export async function api<T>(
 }
 
 export type User = { id: string; email: string; name: string };
-export type Studio = { id: string; name: string; created_at: number; session_count?: number };
+export type Studio = {
+  id: string;
+  name: string;
+  created_at: number;
+  session_count?: number;
+  member_count?: number;
+  role?: string;
+};
+export type StudioMember = {
+  id: string;
+  name: string;
+  email: string;
+  role: "owner" | "editor";
+  created_at: number;
+};
 export type Session = {
   id: string;
   studio_id: string;

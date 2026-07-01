@@ -120,10 +120,19 @@ for (const migration of [
   }
 }
 
+
 db.exec(`
 CREATE INDEX IF NOT EXISTS idx_participants_session ON participants(session_id);
 CREATE INDEX IF NOT EXISTS idx_tracks_recording ON tracks(recording_id);
 CREATE INDEX IF NOT EXISTS idx_recordings_session ON recordings(session_id);
+
+CREATE TABLE IF NOT EXISTS studio_members (
+  studio_id TEXT NOT NULL REFERENCES studios(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'editor', -- owner | editor
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (studio_id, user_id)
+);
 
 CREATE TABLE IF NOT EXISTS transcripts (
   id TEXT PRIMARY KEY,
@@ -136,6 +145,12 @@ CREATE TABLE IF NOT EXISTS transcripts (
   error TEXT,
   created_at INTEGER NOT NULL
 );
+`);
+
+// Backfill: every studio's creator is an owner member (idempotent).
+db.exec(`
+  INSERT OR IGNORE INTO studio_members (studio_id, user_id, role, created_at)
+  SELECT id, user_id, 'owner', created_at FROM studios
 `);
 
 export type UserRow = {

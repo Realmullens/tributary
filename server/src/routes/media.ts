@@ -21,10 +21,11 @@ function trackOwnedByUser(trackId: string, userId: string): (TrackRow & { partic
       `SELECT t.*, p.name AS participant_name FROM tracks t
        JOIN sessions s ON s.id = t.session_id
        JOIN studios st ON st.id = s.studio_id
+       JOIN studio_members mem ON mem.studio_id = st.id AND mem.user_id = ?
        JOIN participants p ON p.id = t.participant_id
-       WHERE t.id = ? AND st.user_id = ?`
+       WHERE t.id = ?`
     )
-    .get(trackId, userId) as (TrackRow & { participant_name: string }) | undefined;
+    .get(userId, trackId) as (TrackRow & { participant_name: string }) | undefined;
   return row ?? null;
 }
 
@@ -151,9 +152,10 @@ export function registerMediaRoutes(app: FastifyInstance): void {
         `SELECT r.* FROM recordings r
          JOIN sessions s ON s.id = r.session_id
          JOIN studios st ON st.id = s.studio_id
-         WHERE r.id = ? AND st.user_id = ?`
+         JOIN studio_members mem ON mem.studio_id = st.id AND mem.user_id = ?
+         WHERE r.id = ?`
       )
-      .get(recordingId, user.id) as RecordingRow | undefined;
+      .get(user.id, recordingId) as RecordingRow | undefined;
     if (!recording) return reply.code(404).send({ error: "Recording not found" });
 
     const exportRow: ExportRow = {
@@ -196,9 +198,10 @@ export function registerMediaRoutes(app: FastifyInstance): void {
         `SELECT r.*, s.title AS session_title, s.id AS session_id FROM recordings r
          JOIN sessions s ON s.id = r.session_id
          JOIN studios st ON st.id = s.studio_id
-         WHERE r.id = ? AND st.user_id = ?`
+         JOIN studio_members mem ON mem.studio_id = st.id AND mem.user_id = ?
+         WHERE r.id = ?`
       )
-      .get(recordingId, user.id) as (RecordingRow & { session_title: string }) | undefined;
+      .get(user.id, recordingId) as (RecordingRow & { session_title: string }) | undefined;
     if (!recording) return reply.code(404).send({ error: "Recording not found" });
 
     const tracks = db
@@ -228,9 +231,10 @@ export function registerMediaRoutes(app: FastifyInstance): void {
         `SELECT r.* FROM recordings r
          JOIN sessions s ON s.id = r.session_id
          JOIN studios st ON st.id = s.studio_id
-         WHERE r.id = ? AND st.user_id = ?`
+         JOIN studio_members mem ON mem.studio_id = st.id AND mem.user_id = ?
+         WHERE r.id = ?`
       )
-      .get(recordingId, userId) as RecordingRow | undefined) ?? null;
+      .get(userId, recordingId) as RecordingRow | undefined) ?? null;
 
   app.post("/api/recordings/:recordingId/transcribe", async (req, reply) => {
     const user = requireUser(req, reply);
@@ -324,9 +328,10 @@ export function registerMediaRoutes(app: FastifyInstance): void {
         `SELECT e.* FROM exports e
          JOIN sessions s ON s.id = e.session_id
          JOIN studios st ON st.id = s.studio_id
-         WHERE e.id = ? AND st.user_id = ?`
+         JOIN studio_members mem ON mem.studio_id = st.id AND mem.user_id = ?
+         WHERE e.id = ?`
       )
-      .get(exportId, user.id) as ExportRow | undefined;
+      .get(user.id, exportId) as ExportRow | undefined;
     if (!exp) return reply.code(404).send({ error: "Export not found" });
     const contentType = exp.format === "mp4" ? "video/mp4" : "audio/wav";
     return streamFile(req, reply, exportPath(exportId, exp.format), `mixed-${exp.type}-${exportId.slice(0, 6)}.${exp.format}`, contentType);
@@ -342,9 +347,10 @@ export function registerMediaRoutes(app: FastifyInstance): void {
         `SELECT e.* FROM exports e
          JOIN sessions s ON s.id = e.session_id
          JOIN studios st ON st.id = s.studio_id
-         WHERE e.id = ? AND st.user_id = ?`
+         JOIN studio_members mem ON mem.studio_id = st.id AND mem.user_id = ?
+         WHERE e.id = ?`
       )
-      .get(exportId, user.id) as ExportRow | undefined;
+      .get(user.id, exportId) as ExportRow | undefined;
     if (!exp) return reply.code(404).send({ error: "Export not found" });
     return streamFile(req, reply, exportPath(exportId, "srt"), `captions-${exportId.slice(0, 6)}.srt`, "application/x-subrip");
   });
