@@ -112,6 +112,7 @@ for (const migration of [
   "ALTER TABLE participants ADD COLUMN admitted_at INTEGER",
   "ALTER TABLE exports ADD COLUMN params_json TEXT",
   "ALTER TABLE transcripts ADD COLUMN words_json TEXT",
+  "ALTER TABLE sessions ADD COLUMN watch_token TEXT",
 ]) {
   try {
     db.exec(migration);

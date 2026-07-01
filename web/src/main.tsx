@@ -9,6 +9,7 @@ import { SessionDetailPage } from "./pages/SessionDetailPage";
 import { EditorPage } from "./pages/EditorPage";
 import { HostRoomPage } from "./pages/HostRoomPage";
 import { JoinPage } from "./pages/JoinPage";
+import { WatchPage } from "./pages/WatchPage";
 import { RecoveryBanner } from "./components/RecoveryBanner";
 import "./index.css";
 
@@ -16,7 +17,8 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loaded, setLoaded] = useState(false);
   const location = useLocation();
-  const isGuestRoute = location.pathname.startsWith("/join/");
+  const isGuestRoute =
+    location.pathname.startsWith("/join/") || location.pathname.startsWith("/watch/");
 
   useEffect(() => {
     api<{ user: User | null }>("/api/auth/me")
@@ -38,6 +40,7 @@ function App() {
     <>
       <Routes>
         <Route path="/join/:inviteToken" element={<JoinPage />} />
+        <Route path="/watch/:watchToken" element={<WatchPage />} />
         <Route path="/auth" element={<AuthPage onAuthed={setUser} />} />
         {user ? (
           <>

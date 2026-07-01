@@ -126,6 +126,20 @@ export function RoomView({
           {!room.connected && <Badge tone="yellow">reconnecting…</Badge>}
         </div>
         <div className="flex items-center gap-3">
+          {room.live && (
+            <span className="flex items-center gap-2 rounded-lg bg-accent/15 px-3 py-1 text-sm font-medium text-blue-300">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-blue-400" />
+              LIVE
+            </span>
+          )}
+          {room.live && room.watchToken && (
+            <button
+              className="text-xs text-blue-300 hover:underline"
+              onClick={() => void navigator.clipboard.writeText(`${location.origin}/watch/${room.watchToken}`)}
+            >
+              Copy watch link
+            </button>
+          )}
           {room.recording ? (
             <span className="flex items-center gap-2 rounded-lg bg-rec/15 px-3 py-1 text-sm font-medium text-rec">
               <span className="h-2 w-2 animate-pulse rounded-full bg-rec" />
@@ -251,6 +265,22 @@ export function RoomView({
             onClick={room.toggleUploadsPaused}
           />
         )}
+        {config.isHost &&
+          (room.live ? (
+            <ControlButton label="End stream" danger onClick={room.stopLive} />
+          ) : (
+            <ControlButton
+              label="Go live"
+              onClick={() => {
+                const rtmp = window.prompt(
+                  "RTMP URL (YouTube/Twitch/etc). Leave empty to stream to the watch page only.",
+                  ""
+                );
+                if (rtmp === null) return;
+                void room.goLive(rtmp.trim() || null);
+              }}
+            />
+          ))}
         {config.isHost &&
           (room.recording || countdownLeft !== null ? (
             <Button variant="rec" onClick={() => void room.stopRecording()}>

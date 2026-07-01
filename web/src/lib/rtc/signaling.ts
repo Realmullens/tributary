@@ -32,6 +32,7 @@ export type SignalingEvents = {
   onWaitingLeft?: (participantId: string) => void;
   onForceMute?: () => void;
   onTeleprompter?: (script: string) => void;
+  onLiveChanged?: (live: boolean) => void;
   onSignal: (from: string, data: any) => void;
   onPeerState: (participantId: string, state: PeerState) => void;
   onPeerUpload: (participantId: string, health: UploadHealth | null) => void;
@@ -179,6 +180,12 @@ export class Signaling {
         break;
       case "teleprompter":
         this.events.onTeleprompter?.(msg.script ?? "");
+        break;
+      case "live-started":
+        this.events.onLiveChanged?.(true);
+        break;
+      case "live-stopped":
+        this.events.onLiveChanged?.(false);
         break;
       case "peer-joined":
         this.events.onPeerJoined(msg.peer);

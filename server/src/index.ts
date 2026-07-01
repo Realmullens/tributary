@@ -13,6 +13,7 @@ import { registerSessionRoutes } from "./routes/sessions.js";
 import { registerTrackRoutes } from "./routes/tracks.js";
 import { registerMediaRoutes } from "./routes/media.js";
 import { registerWsRoutes } from "./routes/ws.js";
+import { registerWatchRoutes } from "./routes/watch.js";
 import { livekitConfig, mintLivekitToken } from "./lib/livekit.js";
 import { participantFromRequest } from "./lib/auth.js";
 
@@ -44,6 +45,7 @@ registerSessionRoutes(app);
 registerTrackRoutes(app);
 registerMediaRoutes(app);
 registerWsRoutes(app);
+registerWatchRoutes(app);
 
 app.get("/api/health", async () => ({ ok: true, name: "tributary", now: Date.now() }));
 

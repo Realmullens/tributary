@@ -4,6 +4,7 @@ import { RecordingEngine, type QualityPreset } from "./recorder/recorder";
 import type { UploadHealth } from "./recorder/upload-manager";
 import { fetchRtcConfig, PeerManager, type RemoteMedia } from "./rtc/peers";
 import { LiveKitManager } from "./rtc/livekit";
+import { ProgramStreamer, type ProgramSource } from "./streaming";
 import { Signaling, type ChatMessage, type Peer, type PeerState } from "./rtc/signaling";
 
 export type RoomPeer = Peer & { media: RemoteMedia };
@@ -36,11 +37,15 @@ export function useRoom(config: RoomConfig) {
   const [declined, setDeclined] = useState(false);
   const [waitingGuests, setWaitingGuests] = useState<Peer[]>([]);
   const [teleprompter, setTeleprompter] = useState("");
+  const [live, setLive] = useState(false);
+  const [watchToken, setWatchToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const signalingRef = useRef<Signaling | null>(null);
   const peerManagerRef = useRef<PeerManager | null>(null);
   const livekitRef = useRef<LiveKitManager | null>(null);
+  const streamerRef = useRef<ProgramStreamer | null>(null);
+  const sourcesRef = useRef<ProgramSource[]>([]);
   const engineRef = useRef<RecordingEngine | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const recordingRef = useRef<RecordingState>(null);
@@ -163,6 +168,7 @@ export function useRoom(config: RoomConfig) {
         setError("The host muted your microphone.");
       },
       onTeleprompter: (script) => setTeleprompter(script),
+      onLiveChanged: setLive,
       onReplaced: () => setReplaced(true),
       onConnectionChange: setConnected,
     });
@@ -215,6 +221,7 @@ export function useRoom(config: RoomConfig) {
       signaling.close();
       peerManagerRef.current?.closeAll();
       livekitRef.current?.close();
+      streamerRef.current?.stop();
       screenStreamRef.current?.getTracks().forEach((t) => t.stop());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -326,6 +333,45 @@ export function useRoom(config: RoomConfig) {
 
   const peerList = useMemo(() => [...peers.values()], [peers]);
 
+  // Keep the program-out source list current for the live-stream compositor.
+  useEffect(() => {
+    const sources: ProgramSource[] = [
+      { name: config.participant.name, stream: config.cameraStream, kind: "camera" },
+    ];
+    if (screenStream) sources.push({ name: "Screen", stream: screenStream, kind: "screen" });
+    for (const p of peerList) {
+      if (p.media.camera) sources.push({ name: p.name, stream: p.media.camera, kind: "camera" });
+      if (p.media.screen) sources.push({ name: `${p.name} — screen`, stream: p.media.screen, kind: "screen" });
+    }
+    sourcesRef.current = sources;
+  }, [peerList, screenStream, config.cameraStream, config.participant.name]);
+
+  const goLive = useCallback(
+    async (rtmpUrl: string | null) => {
+      setError(null);
+      try {
+        const streamer = new ProgramStreamer(() => sourcesRef.current);
+        streamer.onStatus = (isLive, err) => {
+          setLive(isLive);
+          if (err) setError(`Live stream: ${err}`);
+        };
+        streamerRef.current = streamer;
+        await streamer.start(config.token, rtmpUrl);
+        const status = await api<{ watchToken: string }>("/api/live-status", { token: config.token });
+        setWatchToken(status.watchToken);
+      } catch (err) {
+        streamerRef.current = null;
+        setError(err instanceof Error ? err.message : "Could not start live stream");
+      }
+    },
+    [config.token]
+  );
+
+  const stopLive = useCallback(() => {
+    streamerRef.current?.stop();
+    streamerRef.current = null;
+  }, []);
+
   return {
     peers: peerList,
     chat,
@@ -354,6 +400,10 @@ export function useRoom(config: RoomConfig) {
     muteGuest,
     teleprompter,
     saveTeleprompter,
+    live,
+    watchToken,
+    goLive,
+    stopLive,
     error,
     dismissError: () => setError(null),
   };
