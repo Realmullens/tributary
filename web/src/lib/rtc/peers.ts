@@ -21,18 +21,28 @@ const FALLBACK_RTC_CONFIG: RTCConfiguration = {
   iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }],
 };
 
-/** Fetch ICE servers (STUN/TURN) from the server; falls back to public STUN. */
-export async function fetchRtcConfig(): Promise<RTCConfiguration> {
+export type TransportConfig = {
+  mode: "mesh" | "livekit";
+  livekitUrl?: string;
+  rtc: RTCConfiguration;
+};
+
+/** Fetch transport mode + ICE servers from the server; falls back to mesh/STUN. */
+export async function fetchRtcConfig(): Promise<TransportConfig> {
   try {
     const res = await fetch("/api/rtc-config");
     const data = await res.json();
-    if (Array.isArray(data.iceServers) && data.iceServers.length > 0) {
-      return { iceServers: data.iceServers };
-    }
+    return {
+      mode: data.mode === "livekit" && data.livekitUrl ? "livekit" : "mesh",
+      livekitUrl: data.livekitUrl,
+      rtc:
+        Array.isArray(data.iceServers) && data.iceServers.length > 0
+          ? { iceServers: data.iceServers }
+          : FALLBACK_RTC_CONFIG,
+    };
   } catch {
-    // offline or server hiccup — STUN fallback below
+    return { mode: "mesh", rtc: FALLBACK_RTC_CONFIG };
   }
-  return FALLBACK_RTC_CONFIG;
 }
 
 /**

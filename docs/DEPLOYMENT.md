@@ -23,6 +23,7 @@ Optional environment:
 | `PORT` | listen port | `4100` |
 | `TRIBUTARY_DATA_DIR` | media/chunk/db storage | `./data` |
 | `ICE_SERVERS` | JSON array of RTCIceServer for STUN/TURN | Google STUN |
+| `LIVEKIT_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | enable SFU mode for >6 participants | unset (mesh) |
 | `FFMPEG_PATH` / `FFPROBE_PATH` | binaries | `ffmpeg` / `ffprobe` on PATH |
 
 ## 2. HTTPS reverse proxy (Caddy — easiest)
@@ -78,7 +79,24 @@ export ICE_SERVERS='[
 > static username/credential shown above. Managed alternatives: Cloudflare Calls TURN, Twilio
 > NTS, or metered.ca — all hand you an `iceServers` JSON you can paste into `ICE_SERVERS`.
 
-## 4. Checklist for a real session
+## 4. Scaling the live call: LiveKit SFU (optional)
+
+The default mesh call is fine to ~6 participants. Past that, run LiveKit and Tributary
+switches media transport automatically — signaling, recording, and uploads are unchanged.
+
+Local/dev:
+
+```bash
+brew install livekit
+livekit-server --dev        # ws://localhost:7880, key=devkey secret=secret
+LIVEKIT_URL=ws://localhost:7880 LIVEKIT_API_KEY=devkey LIVEKIT_API_SECRET=secret pnpm start
+```
+
+Production: self-host livekit-server (docker or binary; needs its own domain/ports per
+LiveKit's docs) or use LiveKit Cloud — either way, set the three env vars and restart.
+Clients discover the mode from `/api/rtc-config`; no client config needed.
+
+## 5. Checklist for a real session
 
 - [ ] `https://studio.example.com` loads and you can sign in
 - [ ] Lobby shows camera preview (proves secure context)

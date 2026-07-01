@@ -13,6 +13,8 @@ import { registerSessionRoutes } from "./routes/sessions.js";
 import { registerTrackRoutes } from "./routes/tracks.js";
 import { registerMediaRoutes } from "./routes/media.js";
 import { registerWsRoutes } from "./routes/ws.js";
+import { livekitConfig, mintLivekitToken } from "./lib/livekit.js";
+import { participantFromRequest } from "./lib/auth.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 4100);
@@ -45,9 +47,19 @@ registerWsRoutes(app);
 
 app.get("/api/health", async () => ({ ok: true, name: "tributary", now: Date.now() }));
 
+// SFU access token for the joining participant (participant bearer auth).
+app.post("/api/livekit-token", async (req, reply) => {
+  const participant = participantFromRequest(req);
+  if (!participant) return reply.code(401).send({ error: "Invalid participant token" });
+  if (!livekitConfig()) return reply.code(409).send({ error: "LiveKit is not configured" });
+  const token = await mintLivekitToken(participant.session_id, participant.id, participant.name);
+  return { token };
+});
+
 // WebRTC ICE configuration. Defaults to public STUN; set ICE_SERVERS to add TURN
 // for production (guests behind symmetric NATs can't connect with STUN alone), e.g.
 // ICE_SERVERS='[{"urls":"turn:turn.example.com:3478","username":"u","credential":"p"}]'
+// When LIVEKIT_URL/API_KEY/API_SECRET are set, clients use the SFU instead of mesh.
 app.get("/api/rtc-config", async () => {
   let iceServers: unknown = [
     { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
@@ -59,7 +71,12 @@ app.get("/api/rtc-config", async () => {
       app.log.error("ICE_SERVERS is not valid JSON; using STUN defaults");
     }
   }
-  return { iceServers };
+  const livekit = livekitConfig();
+  return {
+    mode: livekit ? "livekit" : "mesh",
+    livekitUrl: livekit?.url,
+    iceServers,
+  };
 });
 
 // Serve the built web app in production

@@ -3,6 +3,7 @@ import { api, type ParticipantInfo } from "./api";
 import { RecordingEngine, type QualityPreset } from "./recorder/recorder";
 import type { UploadHealth } from "./recorder/upload-manager";
 import { fetchRtcConfig, PeerManager, type RemoteMedia } from "./rtc/peers";
+import { LiveKitManager } from "./rtc/livekit";
 import { Signaling, type ChatMessage, type Peer, type PeerState } from "./rtc/signaling";
 
 export type RoomPeer = Peer & { media: RemoteMedia };
@@ -39,6 +40,7 @@ export function useRoom(config: RoomConfig) {
 
   const signalingRef = useRef<Signaling | null>(null);
   const peerManagerRef = useRef<PeerManager | null>(null);
+  const livekitRef = useRef<LiveKitManager | null>(null);
   const engineRef = useRef<RecordingEngine | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const recordingRef = useRef<RecordingState>(null);
@@ -77,24 +79,30 @@ export function useRoom(config: RoomConfig) {
         setWaiting(false);
         setTeleprompter(extras.teleprompter ?? "");
         if (extras.waiting) setWaitingGuests(extras.waiting);
-        const rtcConfig = await rtcConfigPromise;
-        const pm = new PeerManager(
-          signaling,
-          config.participant.id,
-          (pid, media) => {
-            updatePeer(pid, { media });
-          },
-          rtcConfig
-        );
-        peerManagerRef.current = pm;
-        pm.setCameraStream(config.cameraStream);
-        if (screenStreamRef.current) pm.setScreenStream(screenStreamRef.current);
+        const transportConfig = await rtcConfigPromise;
+        const onMedia = (pid: string, media: RemoteMedia) => updatePeer(pid, { media });
+
+        if (transportConfig.mode === "livekit" && transportConfig.livekitUrl && !livekitRef.current) {
+          // SFU mode: LiveKit carries media; everything else stays on our WS.
+          const lk = new LiveKitManager(transportConfig.livekitUrl, config.token, onMedia);
+          livekitRef.current = lk;
+          lk.setCameraStream(config.cameraStream);
+          if (screenStreamRef.current) void lk.setScreenStream(screenStreamRef.current);
+          lk.connect().catch((err) =>
+            setError(`Live call (SFU) failed: ${err instanceof Error ? err.message : err}`)
+          );
+        } else if (transportConfig.mode === "mesh") {
+          const pm = new PeerManager(signaling, config.participant.id, onMedia, transportConfig.rtc);
+          peerManagerRef.current = pm;
+          pm.setCameraStream(config.cameraStream);
+          if (screenStreamRef.current) pm.setScreenStream(screenStreamRef.current);
+        }
 
         setPeers(() => {
           const map = new Map<string, RoomPeer>();
           for (const peer of existingPeers) {
             map.set(peer.participantId, { ...peer, media: { camera: null, screen: null } });
-            pm.addPeer(peer.participantId); // we're the newcomer: we initiate offers
+            peerManagerRef.current?.addPeer(peer.participantId); // mesh: newcomer initiates offers
           }
           return map;
         });
@@ -206,6 +214,7 @@ export function useRoom(config: RoomConfig) {
       engine.stopAll();
       signaling.close();
       peerManagerRef.current?.closeAll();
+      livekitRef.current?.close();
       screenStreamRef.current?.getTracks().forEach((t) => t.stop());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -233,10 +242,12 @@ export function useRoom(config: RoomConfig) {
 
   const stopShare = useCallback(() => {
     engineRef.current?.stopTracksOfKind("screen");
-    screenStreamRef.current?.getTracks().forEach((t) => t.stop());
+    const stream = screenStreamRef.current;
     screenStreamRef.current = null;
     setScreenStream(null);
     peerManagerRef.current?.setScreenStream(null);
+    void livekitRef.current?.setScreenStream(null);
+    stream?.getTracks().forEach((t) => t.stop());
     sendState();
   }, [sendState]);
 
@@ -249,6 +260,7 @@ export function useRoom(config: RoomConfig) {
       screenStreamRef.current = stream;
       setScreenStream(stream);
       peerManagerRef.current?.setScreenStream(stream);
+      void livekitRef.current?.setScreenStream(stream);
       sendState();
       stream.getVideoTracks()[0]?.addEventListener("ended", () => stopShare());
       const rec = recordingRef.current;
