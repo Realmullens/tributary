@@ -26,8 +26,20 @@ function publicUser(user: UserRow) {
   return { id: user.id, email: user.email, name: user.name };
 }
 
+// Simple in-memory rate limit for credential endpoints (per-IP, sliding minute).
+const attempts = new Map<string, number[]>();
+function rateLimited(ip: string, max = 10): boolean {
+  const now = Date.now();
+  const recent = (attempts.get(ip) ?? []).filter((t) => now - t < 60_000);
+  recent.push(now);
+  attempts.set(ip, recent);
+  if (attempts.size > 10_000) attempts.clear(); // bound memory under abuse
+  return recent.length > max;
+}
+
 export function registerAuthRoutes(app: FastifyInstance): void {
   app.post("/api/auth/register", async (req, reply) => {
+    if (rateLimited(req.ip)) return reply.code(429).send({ error: "Too many attempts — try again in a minute" });
     const parsed = registerSchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: "Invalid email, name, or password (min 8 chars)" });
@@ -52,6 +64,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
   });
 
   app.post("/api/auth/login", async (req, reply) => {
+    if (rateLimited(req.ip)) return reply.code(429).send({ error: "Too many attempts — try again in a minute" });
     const parsed = credentialsSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid credentials" });
     const user = db

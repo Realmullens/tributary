@@ -112,15 +112,29 @@ export function SessionDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="ghost"
-            onClick={() => void navigator.clipboard.writeText(`${location.origin}/join/${session.invite_token}`)}
-          >
-            Copy invite link
-          </Button>
-          <Link to={`/sessions/${session.id}/room`}>
-            <Button>Enter studio</Button>
-          </Link>
+          {!session.ended_at && (
+            <>
+              <Button
+                variant="ghost"
+                onClick={() => void navigator.clipboard.writeText(`${location.origin}/join/${session.invite_token}`)}
+              >
+                Copy invite link
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  if (!confirm("End this session? Invite and watch links stop working (recordings are kept).")) return;
+                  await api(`/api/sessions/${session.id}/end`, { body: {} });
+                  await load();
+                }}
+              >
+                End session
+              </Button>
+              <Link to={`/sessions/${session.id}/room`}>
+                <Button>Enter studio</Button>
+              </Link>
+            </>
+          )}
         </div>
       </div>
 

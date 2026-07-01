@@ -12,6 +12,7 @@ import {
   exportPath,
   mp4TrackPath,
   rawTrackPath,
+  trackChunksDir,
   wavTrackPath,
 } from "../lib/storage.js";
 import { broadcast } from "../lib/rooms.js";
@@ -168,20 +169,23 @@ async function processTrack(trackId: string): Promise<void> {
     const rawPath = rawTrackPath(trackId, ext);
 
     // Concatenate MediaRecorder chunks in order — a valid continuous stream.
-    const count = track.final_chunk_count ?? 0;
-    const out = fs.createWriteStream(rawPath);
-    for (let i = 0; i < count; i++) {
+    // Skip if already assembled (reprocess after chunk GC reuses the raw file).
+    if (!fs.existsSync(rawPath) || fs.statSync(rawPath).size === 0) {
+      const count = track.final_chunk_count ?? 0;
+      const out = fs.createWriteStream(rawPath);
+      for (let i = 0; i < count; i++) {
+        await new Promise<void>((resolve, reject) => {
+          const read = fs.createReadStream(chunkPath(trackId, i));
+          read.on("error", reject);
+          read.on("end", resolve);
+          read.pipe(out, { end: false });
+        });
+      }
       await new Promise<void>((resolve, reject) => {
-        const read = fs.createReadStream(chunkPath(trackId, i));
-        read.on("error", reject);
-        read.on("end", resolve);
-        read.pipe(out, { end: false });
+        out.on("error", reject);
+        out.end(resolve);
       });
     }
-    await new Promise<void>((resolve, reject) => {
-      out.on("error", reject);
-      out.end(resolve);
-    });
 
     let durationMs = track.duration_ms;
     let width: number | null = null;
@@ -222,6 +226,10 @@ async function processTrack(trackId: string): Promise<void> {
       "UPDATE tracks SET status = 'ready', duration_ms = ?, width = ?, height = ?, error = NULL WHERE id = ?"
     ).run(durationMs ?? null, width, height, trackId);
     notifyTrack(track.session_id, trackId, "ready");
+
+    // The assembled raw file supersedes the chunks — reclaim the disk.
+    fs.rmSync(trackChunksDir(trackId), { recursive: true, force: true });
+    db.prepare("DELETE FROM chunks WHERE track_id = ?").run(trackId);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[jobs] track ${trackId} processing failed:`, message);

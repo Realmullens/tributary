@@ -1,6 +1,34 @@
 import type { WebSocket } from "ws";
 import { db, type ParticipantRow, type RecordingRow, type SessionRow } from "./db.js";
-import { maybeAutoRecord } from "./recording.js";
+import { maybeAutoRecord, stopRecording } from "./recording.js";
+
+/** How many participants can be in the live room at once (Riverside parity). */
+export const MAX_ROOM_PARTICIPANTS = 10;
+
+// Zombie-recording protection: if everyone leaves mid-recording, stop it
+// after a grace period so a forgotten session doesn't record forever.
+const emptyRoomTimers = new Map<string, NodeJS.Timeout>();
+
+function scheduleEmptyRoomStop(sessionId: string): void {
+  if (emptyRoomTimers.has(sessionId)) return;
+  emptyRoomTimers.set(
+    sessionId,
+    setTimeout(() => {
+      emptyRoomTimers.delete(sessionId);
+      const stillEmpty = (rooms.get(sessionId)?.size ?? 0) === 0;
+      if (stillEmpty && activeRecording(sessionId)) {
+        console.warn(`[rooms] stopping abandoned recording in session ${sessionId}`);
+        stopRecording(sessionId);
+      }
+    }, 60_000)
+  );
+}
+
+function cancelEmptyRoomStop(sessionId: string): void {
+  const timer = emptyRoomTimers.get(sessionId);
+  if (timer) clearTimeout(timer);
+  emptyRoomTimers.delete(sessionId);
+}
 
 export type PeerState = { mic: boolean; cam: boolean; sharing: boolean };
 
@@ -84,6 +112,7 @@ export function addClient(participant: ParticipantRow, socket: WebSocket): Clien
     waiting: needsAdmission,
   };
   r.set(participant.id, client);
+  cancelEmptyRoomStop(participant.session_id);
 
   if (client.waiting) {
     send(client, { t: "waiting-room" });
@@ -130,13 +159,21 @@ export function removeClient(client: Client): void {
   // Only remove if this socket is still the registered one (avoid nuking a reconnect).
   if (r.get(client.participantId)?.socket !== client.socket) return;
   r.delete(client.participantId);
-  if (r.size === 0) rooms.delete(client.sessionId);
+  if (r.size === 0) {
+    rooms.delete(client.sessionId);
+    if (activeRecording(client.sessionId)) scheduleEmptyRoomStop(client.sessionId);
+  }
   if (client.waiting) {
     notifyHosts(client.sessionId, { t: "waiting-left", participantId: client.participantId });
   } else {
     broadcast(client.sessionId, { t: "peer-left", participantId: client.participantId });
   }
   db.prepare("UPDATE participants SET left_at = ? WHERE id = ?").run(Date.now(), client.participantId);
+}
+
+/** Total connected clients (including waiting) — used for the room cap. */
+export function roomSize(sessionId: string): number {
+  return rooms.get(sessionId)?.size ?? 0;
 }
 
 /** How many hosts/guests are currently in the call (waiting-room guests excluded). */

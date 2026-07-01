@@ -11,6 +11,11 @@ const FFMPEG = process.env.FFMPEG_PATH ?? "ffmpeg";
 export const LIVE_DIR = path.join(DATA_DIR, "live");
 fs.mkdirSync(LIVE_DIR, { recursive: true });
 
+// Startup sweep: HLS dirs from previous runs are dead weight.
+for (const entry of fs.readdirSync(LIVE_DIR)) {
+  fs.rmSync(path.join(LIVE_DIR, entry), { recursive: true, force: true });
+}
+
 type ActiveStream = {
   sessionId: string;
   process: ChildProcess;

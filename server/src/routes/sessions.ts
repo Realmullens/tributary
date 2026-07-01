@@ -11,6 +11,7 @@ import {
 import { newId, requireUser } from "../lib/auth.js";
 import { newToken } from "../lib/ids.js";
 import { startRecording, stopRecording } from "../lib/recording.js";
+import { MAX_ROOM_PARTICIPANTS, roomSize } from "../lib/rooms.js";
 import { sessionOwnedByUser } from "./studios.js";
 
 const joinSchema = z.object({ name: z.string().min(1).max(80) });
@@ -124,6 +125,9 @@ export function registerSessionRoutes(app: FastifyInstance): void {
       .get(inviteToken) as SessionRow | undefined;
     if (!session) return reply.code(404).send({ error: "Invite link is invalid" });
     if (session.ended_at) return reply.code(410).send({ error: "This session has ended" });
+    if (roomSize(session.id) >= MAX_ROOM_PARTICIPANTS) {
+      return reply.code(409).send({ error: "This session is full" });
+    }
     const parsed = joinSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: "Please enter your name" });
 
@@ -195,6 +199,20 @@ export function registerSessionRoutes(app: FastifyInstance): void {
         sessionId
       );
     }
+    return { ok: true };
+  });
+
+  // ---- End session: invite + watch links stop working ----
+  app.post("/api/sessions/:sessionId/end", async (req, reply) => {
+    const user = requireUser(req, reply);
+    if (!user) return;
+    const { sessionId } = req.params as { sessionId: string };
+    const session = sessionOwnedByUser(sessionId, user.id);
+    if (!session) return reply.code(404).send({ error: "Session not found" });
+    stopRecording(sessionId); // no-op if not recording
+    db.prepare(
+      "UPDATE sessions SET ended_at = ?, status = 'ended', watch_token = NULL WHERE id = ?"
+    ).run(Date.now(), sessionId);
     return { ok: true };
   });
 
