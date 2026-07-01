@@ -28,6 +28,7 @@ export function Lobby({
   const [microphoneId, setMicrophoneId] = useState<string>("");
   const [preset, setPreset] = useState<QualityPreset>("standard");
   const [headphones, setHeadphones] = useState(false);
+  const [recordWav, setRecordWav] = useState(true);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [micLevel, setMicLevel] = useState(0);
@@ -39,6 +40,7 @@ export function Lobby({
     microphoneId: microphoneId || null,
     preset,
     echoCancellation: !headphones,
+    recordWav,
   };
 
   useEffect(() => {
@@ -168,6 +170,19 @@ export function Lobby({
           </label>
           <p className="text-xs text-gray-500">
             Without headphones we enable echo cancellation so your speakers don't bleed into the recording.
+          </p>
+          <label className="flex items-center gap-2 text-sm text-gray-300">
+            <input
+              type="checkbox"
+              checked={recordWav}
+              onChange={(e) => setRecordWav(e.target.checked)}
+              className="h-4 w-4 accent-[#4f7cff]"
+            />
+            Studio-quality WAV audio track
+          </label>
+          <p className="text-xs text-gray-500">
+            Records an extra uncompressed 48kHz audio track straight from your mic — the best
+            source for post-production.
           </p>
           <Button onClick={join} disabled={!stream} className="mt-2">
             {joinLabel}

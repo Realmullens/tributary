@@ -10,7 +10,7 @@ export type LocalTrackMeta = {
   sessionId: string;
   recordingId: string;
   participantToken: string; // needed to resume upload after a refresh
-  type: "camera" | "screen";
+  type: "camera" | "screen" | "pcm";
   mimeType: string;
   startOffsetMs: number;
   finalChunkCount: number | null; // set when the recorder stops

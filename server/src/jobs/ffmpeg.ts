@@ -61,6 +61,22 @@ export async function toWav(input: string, output: string): Promise<void> {
   await run(FFMPEG, ["-y", "-i", input, "-vn", "-ac", "2", "-ar", "48000", "-c:a", "pcm_s16le", output]);
 }
 
+/** Wrap a headerless s16le PCM stream (AudioWorklet capture) into a WAV container. */
+export async function rawPcmToWav(
+  input: string,
+  output: string,
+  sampleRate: number,
+  channels: number
+): Promise<void> {
+  await run(FFMPEG, [
+    "-y",
+    "-f", "s16le", "-ar", String(sampleRate), "-ac", String(channels),
+    "-i", input,
+    "-c:a", "pcm_s16le",
+    output,
+  ]);
+}
+
 export type MixInput = {
   filePath: string;
   offsetMs: number;

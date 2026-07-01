@@ -9,7 +9,7 @@ import { checkTrackUploaded } from "../jobs/pipeline.js";
 
 const createTrackSchema = z.object({
   recordingId: z.string(),
-  type: z.enum(["camera", "screen"]),
+  type: z.enum(["camera", "screen", "pcm"]),
   mimeType: z.string().min(3).max(200),
   startOffsetMs: z.number().int().min(-60_000).max(60 * 60 * 1000),
 });

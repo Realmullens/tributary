@@ -8,7 +8,15 @@ import {
   wavTrackPath,
 } from "../lib/storage.js";
 import { broadcast } from "../lib/rooms.js";
-import { mixedAudioExport, mixedVideoExport, probe, toMp4, toWav, type MixInput } from "./ffmpeg.js";
+import {
+  mixedAudioExport,
+  mixedVideoExport,
+  probe,
+  rawPcmToWav,
+  toMp4,
+  toWav,
+  type MixInput,
+} from "./ffmpeg.js";
 
 // ---- Tiny in-process job queue (concurrency 2) ----
 
@@ -69,7 +77,8 @@ async function processTrack(trackId: string): Promise<void> {
   notifyTrack(track.session_id, trackId, "processing");
 
   try {
-    const ext = track.mime_type.includes("mp4") ? "mp4" : "webm";
+    const isPcm = track.mime_type.startsWith("audio/pcm");
+    const ext = isPcm ? "pcm" : track.mime_type.includes("mp4") ? "mp4" : "webm";
     const rawPath = rawTrackPath(trackId, ext);
 
     // Concatenate MediaRecorder chunks in order — a valid continuous stream.
@@ -88,23 +97,44 @@ async function processTrack(trackId: string): Promise<void> {
       out.end(resolve);
     });
 
-    const meta = await probe(rawPath);
-    if (meta.hasVideo) await toMp4(rawPath, mp4TrackPath(trackId), meta.hasAudio);
-    if (meta.hasAudio) await toWav(rawPath, wavTrackPath(trackId));
+    let durationMs = track.duration_ms;
+    let width: number | null = null;
+    let height: number | null = null;
 
-    // Prefer probed duration of the transcoded MP4 (raw webm often reports none).
-    let durationMs = meta.durationMs ?? track.duration_ms;
-    if (meta.hasVideo) {
-      const mp4Meta = await probe(mp4TrackPath(trackId));
-      durationMs = mp4Meta.durationMs ?? durationMs;
-    } else if (meta.hasAudio) {
+    if (isPcm) {
+      // Headerless s16le stream → wrap into a WAV container.
+      const params = new Map(
+        track.mime_type
+          .split(";")
+          .slice(1)
+          .map((p) => p.split("=") as [string, string])
+      );
+      const rate = Number(params.get("rate")) || 48000;
+      const channels = Number(params.get("channels")) || 2;
+      await rawPcmToWav(rawPath, wavTrackPath(trackId), rate, channels);
       const wavMeta = await probe(wavTrackPath(trackId));
       durationMs = wavMeta.durationMs ?? durationMs;
+    } else {
+      const meta = await probe(rawPath);
+      width = meta.width;
+      height = meta.height;
+      if (meta.hasVideo) await toMp4(rawPath, mp4TrackPath(trackId), meta.hasAudio);
+      if (meta.hasAudio) await toWav(rawPath, wavTrackPath(trackId));
+
+      // Prefer probed duration of the transcoded MP4 (raw webm often reports none).
+      durationMs = meta.durationMs ?? durationMs;
+      if (meta.hasVideo) {
+        const mp4Meta = await probe(mp4TrackPath(trackId));
+        durationMs = mp4Meta.durationMs ?? durationMs;
+      } else if (meta.hasAudio) {
+        const wavMeta = await probe(wavTrackPath(trackId));
+        durationMs = wavMeta.durationMs ?? durationMs;
+      }
     }
 
     db.prepare(
       "UPDATE tracks SET status = 'ready', duration_ms = ?, width = ?, height = ?, error = NULL WHERE id = ?"
-    ).run(durationMs ?? null, meta.width, meta.height, trackId);
+    ).run(durationMs ?? null, width, height, trackId);
     notifyTrack(track.session_id, trackId, "ready");
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -169,6 +199,12 @@ async function renderExport(exportId: string): Promise<void> {
       .all(exp.recording_id) as (TrackRow & { participant_name: string })[];
     if (tracks.length === 0) throw new Error("No ready tracks for this recording");
 
+    // When a participant has an uncompressed PCM track, use it as their audio
+    // source and mute their camera track's (lossy) audio to avoid doubling.
+    const participantsWithPcm = new Set(
+      tracks.filter((t) => t.type === "pcm").map((t) => t.participant_id)
+    );
+
     const inputs: MixInput[] = [];
     let totalDurationMs = 0;
     for (const track of tracks) {
@@ -178,11 +214,13 @@ async function renderExport(exportId: string): Promise<void> {
         : wavTrackPath(track.id);
       if (!fs.existsSync(filePath)) continue;
       const offsetMs = Math.max(0, track.start_offset_ms);
+      const audioSuperseded =
+        track.type === "camera" && participantsWithPcm.has(track.participant_id);
       inputs.push({
         filePath,
         offsetMs,
         hasVideo,
-        hasAudio: fs.existsSync(wavTrackPath(track.id)),
+        hasAudio: fs.existsSync(wavTrackPath(track.id)) && !audioSuperseded,
         label: track.participant_name,
       });
       totalDurationMs = Math.max(totalDurationMs, offsetMs + (track.duration_ms ?? 0));

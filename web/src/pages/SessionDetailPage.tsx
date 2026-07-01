@@ -199,7 +199,7 @@ export function SessionDetailPage() {
                     <tr key={track.id} className="border-b border-edge/50">
                       <td className="py-2 pr-4">{track.participant_name}</td>
                       <td className="py-2 pr-4 text-gray-400">
-                        {track.type}
+                        {track.type === "pcm" ? "audio (48kHz WAV)" : track.type}
                         {track.width ? ` · ${track.width}×${track.height}` : ""}
                       </td>
                       <td className="py-2 pr-4">

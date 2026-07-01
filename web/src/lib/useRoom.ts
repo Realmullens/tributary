@@ -13,6 +13,7 @@ export type RoomConfig = {
   token: string;
   isHost: boolean;
   preset: QualityPreset;
+  recordWav: boolean;
   cameraStream: MediaStream;
 };
 
@@ -153,6 +154,9 @@ export function useRoom(config: RoomConfig) {
         "camera",
         config.cameraStream
       );
+      if (config.recordWav) {
+        void engine.startPcmTrack(recordingId, startedAtMs, signaling.clockOffsetMs, config.cameraStream);
+      }
       if (screenStreamRef.current) {
         void engine.startTrack(
           recordingId,

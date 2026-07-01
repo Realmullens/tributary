@@ -20,6 +20,9 @@ participant — plus mixed exports — no matter how rough the live connection w
   uploaded with retry/backoff. Live-call quality and recording quality are fully decoupled.
   Optional **auto-record** starts the take when the first guest joins.
 - **Pause uploads** — defer bandwidth use on weak connections while local recording continues.
+- **True 48kHz WAV capture** — an AudioWorklet taps the mic and records uncompressed PCM as a
+  separate per-participant track (no codec round-trip), used preferentially for mixes and
+  transcription. Toggle in the lobby, on by default.
 - **Screen shares are their own recorded tracks**, start/stoppable mid-recording.
 - **Upload resilience** — idempotent chunk-by-index uploads, resume after refresh/offline, and a
   recovery banner that scans IndexedDB on any page load and finishes uploads from crashed tabs
@@ -111,8 +114,6 @@ documented upgrade path for larger rooms.
 ## Current limitations / roadmap
 
 - Mesh topology tops out around 6 participants → LiveKit/SFU integration for 8–10.
-- Audio is Opus-in-WebM at capture; WAV is extracted server-side (true PCM capture via
-  AudioWorklet is the planned upgrade, matching Riverside's plan-gated 48kHz WAV).
 - 4K preset depends on the camera/browser actually delivering 2160p and is encoder-heavy;
   1080p is the recommended ceiling for most machines.
 - No text-based editing / timeline editor / AI clips yet — the natural next milestones now that

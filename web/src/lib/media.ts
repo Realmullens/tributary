@@ -24,6 +24,7 @@ export type CaptureSettings = {
   microphoneId: string | null;
   preset: QualityPreset;
   echoCancellation: boolean; // "are you wearing headphones?" → off
+  recordWav: boolean; // extra uncompressed 48kHz PCM audio track
 };
 
 export function buildConstraints(settings: CaptureSettings): MediaStreamConstraints {

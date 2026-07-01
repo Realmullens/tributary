@@ -121,6 +121,7 @@ export function JoinPage() {
         token: joined.token,
         isHost: false,
         preset: lobbyResult.settings.preset,
+        recordWav: lobbyResult.settings.recordWav,
         cameraStream: lobbyResult.stream,
       }}
       sessionTitle={joined.session.title}

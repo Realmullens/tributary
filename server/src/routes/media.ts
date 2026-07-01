@@ -58,7 +58,11 @@ export function registerMediaRoutes(app: FastifyInstance): void {
     const base = `${safeName(track.participant_name)}-${track.type}-${trackId.slice(0, 6)}`;
     switch (kind ?? "mp4") {
       case "raw": {
-        const ext = track.mime_type.includes("mp4") ? "mp4" : "webm";
+        const ext = track.mime_type.startsWith("audio/pcm")
+          ? "pcm"
+          : track.mime_type.includes("mp4")
+            ? "mp4"
+            : "webm";
         return streamFile(reply, rawTrackPath(trackId, ext), `${base}.raw.${ext}`,
           track.mime_type.split(";")[0] || "video/webm");
       }

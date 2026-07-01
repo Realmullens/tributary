@@ -50,6 +50,7 @@ export function HostRoomPage() {
         token: joinInfo.token,
         isHost: true,
         preset: lobbyResult.settings.preset,
+        recordWav: lobbyResult.settings.recordWav,
         cameraStream: lobbyResult.stream,
       }}
       sessionTitle={joinInfo.session.title}

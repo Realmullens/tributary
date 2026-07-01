@@ -90,15 +90,24 @@ async function transcribeRecording(transcriptId: string): Promise<void> {
   try {
     await ensureModel();
 
-    // Speech comes from camera tracks (per-participant mics); screen audio is skipped.
-    const tracks = db
+    // Speech comes from per-participant mic tracks; screen audio is skipped.
+    // Prefer the uncompressed PCM track when the participant has one.
+    const candidates = db
       .prepare(
         `SELECT t.*, p.name AS participant_name FROM tracks t
          JOIN participants p ON p.id = t.participant_id
-         WHERE t.recording_id = ? AND t.type = 'camera' AND t.status = 'ready'`
+         WHERE t.recording_id = ? AND t.type IN ('camera', 'pcm') AND t.status = 'ready'`
       )
       .all(transcript.recording_id) as (TrackRow & { participant_name: string })[];
-    if (tracks.length === 0) throw new Error("No ready camera tracks to transcribe");
+    const byParticipant = new Map<string, (typeof candidates)[number]>();
+    for (const track of candidates) {
+      const existing = byParticipant.get(track.participant_id);
+      if (!existing || (track.type === "pcm" && existing.type !== "pcm")) {
+        byParticipant.set(track.participant_id, track);
+      }
+    }
+    const tracks = [...byParticipant.values()];
+    if (tracks.length === 0) throw new Error("No ready audio tracks to transcribe");
 
     const allSegments: TranscriptSegment[] = [];
     let language: string | null = null;

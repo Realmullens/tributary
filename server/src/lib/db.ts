@@ -182,7 +182,7 @@ export type TrackRow = {
   recording_id: string;
   session_id: string;
   participant_id: string;
-  type: "camera" | "screen";
+  type: "camera" | "screen" | "pcm";
   mime_type: string;
   status: string;
   start_offset_ms: number;

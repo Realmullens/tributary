@@ -1,5 +1,6 @@
 import { api } from "../api";
 import { chunkStore, type LocalTrackMeta } from "./chunk-store";
+import { PcmRecorder } from "./pcm-recorder";
 import { TrackUploader, type UploadHealth } from "./upload-manager";
 
 const CHUNK_MS = 3000;
@@ -49,8 +50,8 @@ export type EngineOptions = {
 
 type ActiveTrack = {
   localId: string;
-  kind: "camera" | "screen";
-  recorder: MediaRecorder;
+  kind: "camera" | "screen" | "pcm";
+  recorder: MediaRecorder | PcmRecorder;
   uploader: TrackUploader;
   chunkIndex: number;
   writeChain: Promise<void>;
@@ -181,7 +182,7 @@ export class RecordingEngine {
     meta: LocalTrackMeta,
     uploader: TrackUploader,
     recordingId: string,
-    kind: "camera" | "screen",
+    kind: "camera" | "screen" | "pcm",
     mimeType: string,
     startOffsetMs: number,
     attempt = 0
@@ -206,8 +207,92 @@ export class RecordingEngine {
     }
   }
 
+  /**
+   * Uncompressed 48kHz WAV audio track alongside the compressed camera track —
+   * captured straight from the mic via AudioWorklet, no codec round-trip.
+   */
+  async startPcmTrack(
+    recordingId: string,
+    startedAtServerMs: number,
+    clockOffsetMs: number,
+    stream: MediaStream
+  ): Promise<void> {
+    if (stream.getAudioTracks().length === 0) return;
+    const recorder = new PcmRecorder(stream);
+    const mimeType = `audio/pcm;rate=${recorder.sampleRate};channels=${recorder.channels};format=s16le`;
+
+    const localId = crypto.randomUUID();
+    const meta: LocalTrackMeta = {
+      localId,
+      serverTrackId: null,
+      sessionId: this.opts.sessionId,
+      recordingId,
+      participantToken: this.opts.participantToken,
+      type: "pcm",
+      mimeType,
+      startOffsetMs: 0,
+      finalChunkCount: null,
+      finalized: false,
+      durationMs: null,
+      createdAt: Date.now(),
+    };
+    await chunkStore.putTrack(meta);
+
+    const uploader = new TrackUploader(meta, {
+      onHealth: (h) => {
+        this.healths.set(localId, h);
+        this.emitAggregate();
+      },
+      onComplete: () => this.emitAggregate(),
+    });
+    if (this.uploadsPaused) uploader.setPaused(true);
+
+    const entry: ActiveTrack = {
+      localId,
+      kind: "pcm",
+      recorder,
+      uploader,
+      chunkIndex: 0,
+      writeChain: Promise.resolve(),
+      startedAtLocalMs: null,
+    };
+    this.active.set(localId, entry);
+
+    recorder.onstart = () => {
+      entry.startedAtLocalMs = Date.now();
+      const startOffsetMs = Math.round(entry.startedAtLocalMs + clockOffsetMs - startedAtServerMs);
+      meta.startOffsetMs = startOffsetMs;
+      void chunkStore.updateTrack(localId, { startOffsetMs });
+      void this.registerServerTrack(meta, uploader, recordingId, "pcm", mimeType, startOffsetMs);
+    };
+    recorder.onchunk = (chunk) => {
+      const idx = entry.chunkIndex++;
+      entry.writeChain = entry.writeChain.then(async () => {
+        await chunkStore.putChunk(localId, idx, chunk.data);
+        uploader.enqueue(idx, chunk.data.size);
+      });
+    };
+    recorder.onstop = () => {
+      void entry.writeChain.then(() => {
+        const durationMs = entry.startedAtLocalMs ? Date.now() - entry.startedAtLocalMs : null;
+        uploader.markRecorderDone(entry.chunkIndex, durationMs);
+      });
+    };
+
+    try {
+      await recorder.start();
+    } catch (err) {
+      this.opts.onError(
+        `WAV capture unavailable (${err instanceof Error ? err.message : "AudioWorklet error"}); compressed audio still recording.`
+      );
+      this.active.delete(localId);
+      this.healths.delete(localId);
+      await chunkStore.deleteTrack(localId);
+    }
+  }
+
   /** Stop the screen-share track only (share ended while recording continues). */
-  stopTracksOfKind(kind: "camera" | "screen"): void {
+  stopTracksOfKind(kind: "camera" | "screen" | "pcm"): void {
     for (const entry of this.active.values()) {
       if (entry.kind === kind && entry.recorder.state === "recording") {
         entry.recorder.stop();
