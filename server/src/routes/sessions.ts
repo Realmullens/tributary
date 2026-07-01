@@ -1,5 +1,7 @@
 import type { FastifyInstance } from "fastify";
+import fs from "node:fs";
 import { z } from "zod";
+import { exportPath } from "../lib/storage.js";
 import {
   db,
   type ParticipantRow,
@@ -36,9 +38,14 @@ export function registerSessionRoutes(app: FastifyInstance): void {
          WHERE t.session_id = ? ORDER BY t.created_at ASC`
       )
       .all(sessionId);
-    const exports = db
-      .prepare("SELECT * FROM exports WHERE session_id = ? ORDER BY created_at DESC")
-      .all(sessionId);
+    const exports = (
+      db
+        .prepare("SELECT * FROM exports WHERE session_id = ? ORDER BY created_at DESC")
+        .all(sessionId) as Record<string, unknown>[]
+    ).map((e) => ({
+      ...e,
+      has_captions: fs.existsSync(exportPath(String(e.id), "srt")),
+    }));
     const transcripts = db
       .prepare(
         "SELECT id, recording_id, status, language, error, created_at FROM transcripts WHERE session_id = ?"

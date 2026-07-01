@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, type Track, type TranscriptSegment } from "../lib/api";
-import { Badge, Button, formatDuration } from "../components/ui";
+import { api, type Track, type TranscriptSegment, type TranscriptWord } from "../lib/api";
+import { Badge, Button, Select, formatDuration } from "../components/ui";
 
 type EditorData = {
   recording: { id: string; session_id: string; session_title: string; started_at_ms: number };
   tracks: Track[];
   transcriptSegments: TranscriptSegment[] | null;
+  transcriptWords: TranscriptWord[] | null;
 };
 
 type Cut = { startMs: number; endMs: number };
@@ -26,6 +27,10 @@ export function EditorPage() {
   const [cuts, setCuts] = useState<Cut[]>([]);
   const [pendingCutStart, setPendingCutStart] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [aspect, setAspect] = useState("16:9");
+  const [captions, setCaptions] = useState(false);
+  const [wordAnchor, setWordAnchor] = useState<number | null>(null);
+  const [wordSelEnd, setWordSelEnd] = useState<number | null>(null);
 
   const mediaRefs = useRef(new Map<string, HTMLVideoElement | HTMLAudioElement>());
   const playheadRef = useRef(0);
@@ -130,11 +135,39 @@ export function EditorPage() {
           trimStartMs: trimStartMs > 0 ? trimStartMs : undefined,
           trimEndMs: trimEndMs ?? undefined,
           cuts,
+          aspect: type === "mixed_video" && aspect !== "16:9" ? aspect : undefined,
+          captions: type === "mixed_video" && captions ? true : undefined,
         },
       });
       navigate(`/sessions/${data!.recording.session_id}`);
     } finally {
       setExporting(false);
+    }
+  };
+
+  const cutSelectedWords = () => {
+    const words = data?.transcriptWords;
+    if (!words || wordAnchor === null || wordSelEnd === null) return;
+    const [a, b] = [Math.min(wordAnchor, wordSelEnd), Math.max(wordAnchor, wordSelEnd)];
+    const startMs = words[a].startMs;
+    const endMs = Math.max(words[b].endMs, startMs + 120);
+    setCuts((prev) => [...prev, { startMs, endMs }].sort((x, y) => x.startMs - y.startMs));
+    setWordAnchor(null);
+    setWordSelEnd(null);
+  };
+
+  const clickWord = (i: number) => {
+    const words = data?.transcriptWords;
+    if (!words) return;
+    seek(words[i].startMs);
+    if (wordAnchor === null) {
+      setWordAnchor(i);
+      setWordSelEnd(null);
+    } else if (wordSelEnd === null && i !== wordAnchor) {
+      setWordSelEnd(i);
+    } else {
+      setWordAnchor(i);
+      setWordSelEnd(null);
     }
   };
 
@@ -161,6 +194,28 @@ export function EditorPage() {
           <Badge tone="blue">editor</Badge>
         </div>
         <div className="flex items-center gap-2">
+          <div className="w-36">
+            <Select
+              value={aspect}
+              onChange={setAspect}
+              options={[
+                { value: "16:9", label: "16:9 · landscape" },
+                { value: "1:1", label: "1:1 · square" },
+                { value: "9:16", label: "9:16 · vertical" },
+              ]}
+            />
+          </div>
+          {data?.transcriptSegments && (
+            <label className="flex items-center gap-1.5 text-xs text-gray-300">
+              <input
+                type="checkbox"
+                checked={captions}
+                onChange={(e) => setCaptions(e.target.checked)}
+                className="h-4 w-4 accent-[#4f7cff]"
+              />
+              Captions
+            </label>
+          )}
           <Button variant="ghost" disabled={exporting} onClick={() => void runExport("mixed_audio")}>
             Export audio
           </Button>
@@ -309,30 +364,113 @@ export function EditorPage() {
           </div>
         </main>
 
-        {/* Transcript rail */}
-        {data.transcriptSegments && data.transcriptSegments.length > 0 && (
-          <aside className="w-80 overflow-y-auto border-l border-edge bg-panel p-3">
-            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
-              Transcript — click to seek
-            </h2>
-            {data.transcriptSegments.map((seg, i) => {
-              const inCut = cuts.some((c) => seg.startMs >= c.startMs && seg.startMs < c.endMs);
-              return (
-                <button
-                  key={i}
-                  onClick={() => seek(seg.startMs)}
-                  className={`mb-1 block w-full rounded px-2 py-1 text-left text-sm hover:bg-panel-2 ${
-                    inCut ? "opacity-40 line-through" : ""
-                  } ${playheadMs >= seg.startMs && playheadMs < seg.endMs ? "bg-accent/15" : ""}`}
-                >
-                  <span className="mr-2 text-xs tabular-nums text-gray-500">
-                    {formatDuration(seg.startMs)}
-                  </span>
-                  <span className="font-medium text-blue-300">{seg.speaker}:</span>{" "}
-                  <span className="text-gray-200">{seg.text}</span>
-                </button>
-              );
-            })}
+        {/* Transcript rail: word-level text editing when word timings exist */}
+        {((data.transcriptWords?.length ?? 0) > 0 || (data.transcriptSegments?.length ?? 0) > 0) && (
+          <aside className="flex w-80 flex-col border-l border-edge bg-panel">
+            <div className="border-b border-edge p-3">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                Transcript
+              </h2>
+              {data.transcriptWords?.length ? (
+                wordAnchor !== null && wordSelEnd !== null ? (
+                  <div className="mt-2 flex gap-2">
+                    <Button variant="danger" onClick={cutSelectedWords} className="!py-1 text-xs">
+                      Cut selected words
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="!py-1 text-xs"
+                      onClick={() => {
+                        setWordAnchor(null);
+                        setWordSelEnd(null);
+                      }}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="mt-1 text-xs text-gray-500">
+                    Click a word to seek and start a selection; click another to select the range,
+                    then cut it — the video follows the text.
+                  </p>
+                )
+              ) : (
+                <p className="mt-1 text-xs text-gray-500">Click a line to seek.</p>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-3">
+              {data.transcriptWords?.length
+                ? (() => {
+                    const words = data.transcriptWords!;
+                    const selLo =
+                      wordAnchor !== null
+                        ? Math.min(wordAnchor, wordSelEnd ?? wordAnchor)
+                        : null;
+                    const selHi =
+                      wordAnchor !== null
+                        ? Math.max(wordAnchor, wordSelEnd ?? wordAnchor)
+                        : null;
+                    const blocks: { speaker: string; startIdx: number; words: TranscriptWord[] }[] = [];
+                    words.forEach((w, i) => {
+                      const last = blocks[blocks.length - 1];
+                      if (!last || last.speaker !== w.speaker) {
+                        blocks.push({ speaker: w.speaker, startIdx: i, words: [w] });
+                      } else {
+                        last.words.push(w);
+                      }
+                    });
+                    return blocks.map((block, bi) => (
+                      <div key={bi} className="mb-3">
+                        <div className="mb-0.5 text-xs font-medium text-blue-300">
+                          {block.speaker}
+                          <span className="ml-2 tabular-nums text-gray-500">
+                            {formatDuration(block.words[0].startMs)}
+                          </span>
+                        </div>
+                        <div className="text-sm leading-6 text-gray-200">
+                          {block.words.map((w, wi) => {
+                            const idx = block.startIdx + wi;
+                            const inCut = cuts.some(
+                              (c) => w.startMs >= c.startMs && w.startMs < c.endMs
+                            );
+                            const selected = selLo !== null && idx >= selLo && idx <= selHi!;
+                            const current = playheadMs >= w.startMs && playheadMs < w.endMs;
+                            return (
+                              <span
+                                key={wi}
+                                onClick={() => clickWord(idx)}
+                                className={`cursor-pointer rounded px-0.5 hover:bg-panel-2 ${
+                                  inCut ? "text-gray-500 line-through" : ""
+                                } ${selected ? "bg-accent/40" : ""} ${current ? "bg-white/20" : ""}`}
+                              >
+                                {w.text}{" "}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ));
+                  })()
+                : data.transcriptSegments!.map((seg, i) => {
+                    const inCut = cuts.some((c) => seg.startMs >= c.startMs && seg.startMs < c.endMs);
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => seek(seg.startMs)}
+                        className={`mb-1 block w-full rounded px-2 py-1 text-left text-sm hover:bg-panel-2 ${
+                          inCut ? "opacity-40 line-through" : ""
+                        } ${playheadMs >= seg.startMs && playheadMs < seg.endMs ? "bg-accent/15" : ""}`}
+                      >
+                        <span className="mr-2 text-xs tabular-nums text-gray-500">
+                          {formatDuration(seg.startMs)}
+                        </span>
+                        <span className="font-medium text-blue-300">{seg.speaker}:</span>{" "}
+                        <span className="text-gray-200">{seg.text}</span>
+                      </button>
+                    );
+                  })}
+            </div>
           </aside>
         )}
       </div>

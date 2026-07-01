@@ -344,6 +344,8 @@ export function SessionDetailPage() {
                   <div key={exp.id} className="flex items-center justify-between rounded-lg bg-panel-2 px-3 py-2 text-sm">
                     <span className="text-gray-300">
                       {exp.type === "mixed_video" ? "Mixed video (MP4)" : "Mixed audio (WAV)"}
+                      {exp.params_json ? " · edited" : ""}
+                      {exp.duration_ms ? ` · ${formatDuration(exp.duration_ms)}` : ""}
                       {exp.size_bytes ? ` · ${formatBytes(exp.size_bytes)}` : ""}
                     </span>
                     <span className="flex items-center gap-3">
@@ -351,6 +353,11 @@ export function SessionDetailPage() {
                       {exp.status === "ready" && (
                         <a className="text-xs text-blue-300 hover:underline" href={`/api/exports/${exp.id}/download`}>
                           Download
+                        </a>
+                      )}
+                      {exp.status === "ready" && exp.has_captions && (
+                        <a className="text-xs text-blue-300 hover:underline" href={`/api/exports/${exp.id}/captions`}>
+                          SRT
                         </a>
                       )}
                       {exp.error && (

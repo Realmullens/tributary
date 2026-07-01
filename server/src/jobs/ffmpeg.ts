@@ -128,19 +128,48 @@ function applyKeepWindows(
  * Render a grid-layout mixed MP4 from per-participant tracks.
  * Each track is delayed by its start offset so independently recorded files align.
  */
+let subtitlesFilterAvailable: boolean | null = null;
+
+/** Burn-in needs an ffmpeg built with libass; homebrew's slim build lacks it. */
+export async function hasSubtitlesFilter(): Promise<boolean> {
+  if (subtitlesFilterAvailable === null) {
+    try {
+      const out = await run(FFMPEG, ["-hide_banner", "-filters"]);
+      subtitlesFilterAvailable = /\bsubtitles\b/.test(out);
+    } catch {
+      subtitlesFilterAvailable = false;
+    }
+  }
+  return subtitlesFilterAvailable;
+}
+
 export async function mixedVideoExport(
   inputs: MixInput[],
   output: string,
   totalDurationMs: number,
   keepWindows?: KeepWindow[],
-  size = { w: 1920, h: 1080 }
+  size = { w: 1920, h: 1080 },
+  burnSrtPath?: string
 ): Promise<void> {
   const videoInputs = inputs.filter((i) => i.hasVideo);
   const audioInputs = inputs.filter((i) => i.hasAudio);
   if (videoInputs.length === 0) throw new Error("No video tracks to mix");
 
-  const cols = Math.ceil(Math.sqrt(videoInputs.length));
-  const rows = Math.ceil(videoInputs.length / cols);
+  // Pick the column count whose cells are closest to 16:9 — on a 9:16 canvas
+  // this naturally stacks participants vertically instead of squeezing them.
+  const n = videoInputs.length;
+  let cols = 1;
+  let bestScore = -1;
+  for (let c = 1; c <= n; c++) {
+    const r = Math.ceil(n / c);
+    const cellRatio = size.w / c / (size.h / r);
+    const score = Math.min(cellRatio, 16 / 9) / Math.max(cellRatio, 16 / 9);
+    if (score > bestScore) {
+      bestScore = score;
+      cols = c;
+    }
+  }
+  const rows = Math.ceil(n / cols);
   const cellW = Math.floor(size.w / cols / 2) * 2;
   const cellH = Math.floor(size.h / rows / 2) * 2;
 
@@ -187,6 +216,12 @@ export async function mixedVideoExport(
     const edited = applyKeepWindows(filters, keepWindows, vLabel, aLabel);
     vLabel = edited.v!;
     aLabel = edited.a;
+  }
+  if (burnSrtPath) {
+    filters.push(
+      `[${vLabel}]subtitles='${burnSrtPath.replace(/'/g, "\\'")}':force_style='FontSize=18,Outline=1,MarginV=40'[vcap]`
+    );
+    vLabel = "vcap";
   }
 
   args.push("-filter_complex", filters.join(";"));

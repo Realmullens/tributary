@@ -46,8 +46,12 @@ participant — plus mixed exports — no matter how rough the live connection w
 - **Premiere/FCP XML export** — one click gives you an xmeml timeline that drops the downloaded
   MP4/WAV tracks onto synced tracks in Premiere Pro or DaVinci Resolve, offsets applied.
 - **Editor** — per-recording editor with synced multi-track preview, click-to-seek timeline,
-  trim + cut ranges, and a transcript rail (click a line to jump there; cut lines get struck
-  through). Edits render server-side into new mixed exports — non-destructive throughout.
+  trim + cut ranges, and **text-based editing**: word-level timestamps from whisper let you
+  select words in the transcript and cut them — the video follows the text. Edits render
+  server-side into new mixed exports — non-destructive throughout.
+- **Social clips** — export any edit as 16:9, 1:1, or 9:16 (the grid re-arranges to fit, e.g.
+  vertical stacking for Shorts/Reels) with captions: a re-timed SRT sidecar always, burned-in
+  when your ffmpeg has libass.
 - **TURN-ready** — set `ICE_SERVERS` to add a TURN relay for guests behind strict NATs; see
   [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for HTTPS + coturn recipes.
 
@@ -126,8 +130,12 @@ documented upgrade path for larger rooms.
 - Mesh topology tops out around 6 participants → LiveKit/SFU integration for 8–10.
 - 4K preset depends on the camera/browser actually delivering 2160p and is encoder-heavy;
   1080p is the recommended ceiling for most machines.
-- Editor covers trim/cuts/transcript-seek; word-level text editing, layout switching, and AI
-  clips are the next tier (see `docs/SPEC.md` §2 for the full deferred list).
+- Editor covers trim/cuts/word-level text editing/clips; layout switching mid-timeline, filler-
+  word auto-removal, and AI highlight detection are the next tier (see `docs/SPEC.md` §2).
+- Caption burn-in requires ffmpeg with libass (homebrew's default build lacks it); the SRT
+  sidecar is always generated.
+- Live-call scaling beyond ~6 participants (LiveKit SFU) is deliberately deferred — it's the
+  only feature that would add external infrastructure.
 - Local-disk storage and in-process job queue — swap for S3 + a real queue to scale out.
 - Device switching is locked while recording.
 

@@ -15,6 +15,7 @@ import {
 } from "../lib/storage.js";
 import { broadcast } from "../lib/rooms.js";
 import {
+  hasSubtitlesFilter,
   mixedAudioExport,
   mixedVideoExport,
   probe,
@@ -24,6 +25,49 @@ import {
   type KeepWindow,
   type MixInput,
 } from "./ffmpeg.js";
+import { renderTranscript } from "./transcribe.js";
+import type { TranscriptSegment } from "../lib/db.js";
+
+const ASPECT_SIZES: Record<string, { w: number; h: number }> = {
+  "16:9": { w: 1920, h: 1080 },
+  "1:1": { w: 1080, h: 1080 },
+  "9:16": { w: 1080, h: 1920 },
+};
+
+/** Map a timeline instant into the edited (post-cut) timeline; null if removed. */
+function mapThroughWindows(ms: number, windows: KeepWindow[]): number | null {
+  let acc = 0;
+  for (const w of windows) {
+    if (ms < w.startMs) return null;
+    if (ms <= w.endMs) return acc + (ms - w.startMs);
+    acc += w.endMs - w.startMs;
+  }
+  return null;
+}
+
+/** Re-time caption segments through the edit; drops fully-cut segments. */
+export function remapSegments(
+  segments: TranscriptSegment[],
+  windows: KeepWindow[] | undefined
+): TranscriptSegment[] {
+  if (!windows) return segments;
+  const out: TranscriptSegment[] = [];
+  for (const seg of segments) {
+    // Clamp the segment into any window it overlaps, then map both ends.
+    for (const w of windows) {
+      const s = Math.max(seg.startMs, w.startMs);
+      const e = Math.min(seg.endMs, w.endMs);
+      if (e - s < 100) continue;
+      const mappedStart = mapThroughWindows(s, windows);
+      const mappedEnd = mapThroughWindows(e, windows);
+      if (mappedStart !== null && mappedEnd !== null && mappedEnd > mappedStart) {
+        out.push({ ...seg, startMs: mappedStart, endMs: mappedEnd });
+      }
+      break; // one mapped occurrence per segment is enough for captions
+    }
+  }
+  return out;
+}
 
 /** Turn trim + cut params into ordered keep windows; undefined = no editing. */
 export function computeKeepWindows(
@@ -275,7 +319,26 @@ async function renderExport(exportId: string): Promise<void> {
 
     const outPath = exportPath(exportId, exp.format);
     if (exp.type === "mixed_video") {
-      await mixedVideoExport(inputs, outPath, totalDurationMs, keepWindows);
+      const size = ASPECT_SIZES[params.aspect ?? "16:9"] ?? ASPECT_SIZES["16:9"];
+
+      // Captions: always produce a re-timed SRT sidecar; burn in when possible.
+      let burnSrtPath: string | undefined;
+      if (params.captions) {
+        const transcript = db
+          .prepare(
+            "SELECT segments_json FROM transcripts WHERE recording_id = ? AND status = 'ready'"
+          )
+          .get(exp.recording_id) as { segments_json: string | null } | undefined;
+        if (transcript?.segments_json) {
+          const remapped = remapSegments(JSON.parse(transcript.segments_json), keepWindows);
+          if (remapped.length > 0) {
+            const srtPath = exportPath(exportId, "srt");
+            fs.writeFileSync(srtPath, renderTranscript(remapped, "srt"));
+            if (await hasSubtitlesFilter()) burnSrtPath = srtPath;
+          }
+        }
+      }
+      await mixedVideoExport(inputs, outPath, totalDurationMs, keepWindows, size, burnSrtPath);
     } else {
       await mixedAudioExport(inputs, outPath, totalDurationMs, keepWindows);
     }

@@ -117,21 +117,32 @@ export function registerMediaRoutes(app: FastifyInstance): void {
       trimStartMs?: number;
       trimEndMs?: number;
       cuts?: { startMs: number; endMs: number }[];
+      aspect?: string;
+      captions?: boolean;
     };
     const type = body.type === "mixed_audio" ? "mixed_audio" : "mixed_video";
 
-    // Optional edit decision list from the editor
+    // Optional edit decision list / render options from the editor
     let paramsJson: string | null = null;
     const cuts = Array.isArray(body.cuts)
       ? body.cuts
           .filter((c) => Number.isFinite(c?.startMs) && Number.isFinite(c?.endMs))
           .map((c) => ({ startMs: Math.round(c.startMs), endMs: Math.round(c.endMs) }))
       : [];
-    if (Number.isFinite(body.trimStartMs) || Number.isFinite(body.trimEndMs) || cuts.length > 0) {
+    const aspect = ["16:9", "1:1", "9:16"].includes(body.aspect ?? "") ? body.aspect : undefined;
+    if (
+      Number.isFinite(body.trimStartMs) ||
+      Number.isFinite(body.trimEndMs) ||
+      cuts.length > 0 ||
+      aspect ||
+      body.captions
+    ) {
       paramsJson = JSON.stringify({
         trimStartMs: Number.isFinite(body.trimStartMs) ? Math.round(body.trimStartMs!) : undefined,
         trimEndMs: Number.isFinite(body.trimEndMs) ? Math.round(body.trimEndMs!) : undefined,
         cuts,
+        aspect,
+        captions: body.captions === true || undefined,
       });
     }
 
@@ -198,12 +209,15 @@ export function registerMediaRoutes(app: FastifyInstance): void {
       )
       .all(recordingId);
     const transcript = db
-      .prepare("SELECT segments_json FROM transcripts WHERE recording_id = ? AND status = 'ready'")
-      .get(recordingId) as { segments_json: string | null } | undefined;
+      .prepare(
+        "SELECT segments_json, words_json FROM transcripts WHERE recording_id = ? AND status = 'ready'"
+      )
+      .get(recordingId) as { segments_json: string | null; words_json: string | null } | undefined;
     return {
       recording,
       tracks,
       transcriptSegments: transcript?.segments_json ? JSON.parse(transcript.segments_json) : null,
+      transcriptWords: transcript?.words_json ? JSON.parse(transcript.words_json) : null,
     };
   });
 
@@ -316,5 +330,22 @@ export function registerMediaRoutes(app: FastifyInstance): void {
     if (!exp) return reply.code(404).send({ error: "Export not found" });
     const contentType = exp.format === "mp4" ? "video/mp4" : "audio/wav";
     return streamFile(req, reply, exportPath(exportId, exp.format), `mixed-${exp.type}-${exportId.slice(0, 6)}.${exp.format}`, contentType);
+  });
+
+  // Re-timed caption sidecar generated alongside an export (if captions were on).
+  app.get("/api/exports/:exportId/captions", async (req, reply) => {
+    const user = requireUser(req, reply);
+    if (!user) return;
+    const { exportId } = req.params as { exportId: string };
+    const exp = db
+      .prepare(
+        `SELECT e.* FROM exports e
+         JOIN sessions s ON s.id = e.session_id
+         JOIN studios st ON st.id = s.studio_id
+         WHERE e.id = ? AND st.user_id = ?`
+      )
+      .get(exportId, user.id) as ExportRow | undefined;
+    if (!exp) return reply.code(404).send({ error: "Export not found" });
+    return streamFile(req, reply, exportPath(exportId, "srt"), `captions-${exportId.slice(0, 6)}.srt`, "application/x-subrip");
   });
 }

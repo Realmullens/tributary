@@ -72,6 +72,8 @@ export type ExportItem = {
   duration_ms: number | null;
   error: string | null;
   created_at: number;
+  params_json?: string | null;
+  has_captions?: boolean;
 };
 export type TranscriptSummary = {
   id: string;
@@ -88,6 +90,7 @@ export type TranscriptSegment = {
   speaker: string;
   trackId: string;
 };
+export type TranscriptWord = TranscriptSegment;
 export type ParticipantInfo = { id: string; name: string; role: "host" | "guest" };
 export type SessionParticipant = {
   id: string;

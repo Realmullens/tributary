@@ -111,6 +111,7 @@ for (const migration of [
   "ALTER TABLE sessions ADD COLUMN teleprompter_script TEXT",
   "ALTER TABLE participants ADD COLUMN admitted_at INTEGER",
   "ALTER TABLE exports ADD COLUMN params_json TEXT",
+  "ALTER TABLE transcripts ADD COLUMN words_json TEXT",
 ]) {
   try {
     db.exec(migration);
@@ -212,6 +213,14 @@ export type TranscriptSegment = {
   trackId: string;
 };
 
+export type TranscriptWord = {
+  startMs: number;
+  endMs: number;
+  text: string;
+  speaker: string;
+  trackId: string;
+};
+
 export type TranscriptRow = {
   id: string;
   recording_id: string;
@@ -220,6 +229,7 @@ export type TranscriptRow = {
   language: string | null;
   provider: string;
   segments_json: string | null;
+  words_json?: string | null;
   error: string | null;
   created_at: number;
 };
@@ -229,6 +239,10 @@ export type ExportParams = {
   trimEndMs?: number;
   /** Ranges (ms, timeline time) removed from the middle of the recording. */
   cuts?: { startMs: number; endMs: number }[];
+  /** Output canvas: "16:9" (default), "1:1", or "9:16" for social clips. */
+  aspect?: string;
+  /** Generate captions (SRT sidecar; burned in when ffmpeg supports libass). */
+  captions?: boolean;
 };
 
 export type ExportRow = {

@@ -3,7 +3,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline as streamPipeline } from "node:stream/promises";
-import { db, type TranscriptRow, type TranscriptSegment, type TrackRow } from "../lib/db.js";
+import {
+  db,
+  type TranscriptRow,
+  type TranscriptSegment,
+  type TranscriptWord,
+  type TrackRow,
+} from "../lib/db.js";
 import { newId } from "../lib/ids.js";
 import { DATA_DIR, wavTrackPath } from "../lib/storage.js";
 import { broadcast } from "../lib/rooms.js";
@@ -110,6 +116,7 @@ async function transcribeRecording(transcriptId: string): Promise<void> {
     if (tracks.length === 0) throw new Error("No ready audio tracks to transcribe");
 
     const allSegments: TranscriptSegment[] = [];
+    const allWords: TranscriptWord[] = [];
     let language: string | null = null;
 
     for (const track of tracks) {
@@ -126,7 +133,7 @@ async function transcribeRecording(transcriptId: string): Promise<void> {
         "-f", wav16,
         "-l", "auto",
         "-t", "4",
-        "-oj",
+        "-ojf", // full JSON: segment text plus token-level offsets for word timing
         "-of", outPrefix,
         "--no-prints",
       ]);
@@ -142,17 +149,22 @@ async function transcribeRecording(transcriptId: string): Promise<void> {
           speaker: track.participant_name,
           trackId: track.id,
         });
+        allWords.push(
+          ...tokensToWords(seg.tokens ?? [], track.start_offset_ms, track.participant_name, track.id)
+        );
       }
       fs.rmSync(wav16, { force: true });
       fs.rmSync(`${outPrefix}.json`, { force: true });
     }
 
     allSegments.sort((a, b) => a.startMs - b.startMs);
+    allWords.sort((a, b) => a.startMs - b.startMs);
     if (allSegments.length === 0) throw new Error("Transcription produced no segments");
     update({
       status: "ready",
       language,
       segments_json: JSON.stringify(allSegments),
+      words_json: JSON.stringify(allWords),
       error: null,
     });
   } catch (err) {
@@ -163,6 +175,35 @@ async function transcribeRecording(transcriptId: string): Promise<void> {
       : "";
     update({ status: "failed", error: (message + hint).slice(0, 2000) });
   }
+}
+
+/**
+ * Merge whisper.cpp BPE tokens into words with timestamps.
+ * A token starting with a space begins a new word; punctuation-only tokens
+ * attach to the previous word; special tokens like [_BEG_] are dropped.
+ */
+function tokensToWords(
+  tokens: { text?: string; offsets?: { from: number; to: number } }[],
+  offsetMs: number,
+  speaker: string,
+  trackId: string
+): TranscriptWord[] {
+  const words: TranscriptWord[] = [];
+  for (const token of tokens) {
+    const text = token.text ?? "";
+    if (/^\[_.+_\]$/.test(text) || text.trim() === "") continue;
+    const from = (token.offsets?.from ?? 0) + offsetMs;
+    const to = (token.offsets?.to ?? 0) + offsetMs;
+    const startsWord = text.startsWith(" ") || words.length === 0;
+    if (startsWord) {
+      words.push({ startMs: from, endMs: to, text: text.trim(), speaker, trackId });
+    } else {
+      const last = words[words.length - 1];
+      last.text += text;
+      last.endMs = Math.max(last.endMs, to);
+    }
+  }
+  return words.filter((w) => w.text.length > 0);
 }
 
 // ---- Caption/text rendering ----
