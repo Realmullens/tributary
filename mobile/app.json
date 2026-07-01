@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "Tributary",
+    "slug": "tributary",
+    "version": "0.1.0",
+    "scheme": "tributary",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0b0d12",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "org.divinecreative.tributary",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Tributary uses the camera to record your video in the studio.",
+        "NSMicrophoneUsageDescription": "Tributary uses the microphone to record your audio in the studio."
+      }
+    },
+    "android": {
+      "package": "org.divinecreative.tributary",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#0b0d12",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}

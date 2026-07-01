@@ -55,9 +55,20 @@ participant — plus mixed exports — no matter how rough the live connection w
 - **TURN-ready** — set `ICE_SERVERS` to add a TURN relay for guests behind strict NATs; see
   [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for HTTPS + coturn recipes.
 - **AI-agent CLI** — `tributary` exposes the whole post-production surface (transcripts,
-  word timestamps, cuts, clips, downloads) as JSON commands, so any agent — Claude Code,
-  Codex, a script — can be the AI layer: highlight clips, filler-word removal, show notes.
-  See [`docs/AI-AGENTS.md`](docs/AI-AGENTS.md). Tributary itself ships no LLM dependency.
+  word timestamps, cuts, clips, downloads, enhancement) as JSON commands, so any agent —
+  Claude Code, Codex, a script — can be the AI layer: highlight clips, filler-word removal,
+  show notes. See [`docs/AI-AGENTS.md`](docs/AI-AGENTS.md). No LLM dependency ships in the box.
+- **SFU mode** — set `LIVEKIT_URL/API_KEY/API_SECRET` and the live call rides LiveKit instead
+  of mesh, scaling past the ~6-participant ceiling. Recording/signaling unchanged.
+- **Live streaming + watch page** — one click composites a program feed (all tiles + mixed
+  audio) and streams it to any RTMP destination (YouTube/Twitch/custom) and/or a public
+  `/watch/<token>` page served as HLS — no third-party platform needed.
+- **Teams** — invite members to a studio by email; owners manage the team, editors do
+  everything else.
+- **Audio enhancement** — per-track noise reduction + loudness normalization (−16 LUFS);
+  mixes automatically prefer enhanced audio.
+- **Mobile app** — Expo shell (`mobile/`) wrapping the studio with native camera/mic
+  permissions and keep-awake; your phone joins as a fully recorded extra camera.
 
 ## Quick start
 
@@ -139,15 +150,17 @@ documented upgrade path for larger rooms.
 
 ## Current limitations / roadmap
 
-- Mesh topology tops out around 6 participants → LiveKit/SFU integration for 8–10.
 - 4K preset depends on the camera/browser actually delivering 2160p and is encoder-heavy;
   1080p is the recommended ceiling for most machines.
-- Editor covers trim/cuts/word-level text editing/clips; layout switching mid-timeline, filler-
-  word auto-removal, and AI highlight detection are the next tier (see `docs/SPEC.md` §2).
+- Editor covers trim/cuts/word-level text editing/clips; layout switching mid-timeline and AI
+  highlight detection are the next tier (agents can do both today via the CLI).
 - Caption burn-in requires ffmpeg with libass (homebrew's default build lacks it); the SRT
   sidecar is always generated.
-- Live-call scaling beyond ~6 participants (LiveKit SFU) is deliberately deferred — it's the
-  only feature that would add external infrastructure.
+- Eye-contact correction and speech regeneration (VideoDub-style) are deliberately out of
+  scope: no production-quality open models exist to self-host — they'd be paid-API add-ons.
+- SSO (SAML/OIDC) deferred until there's a real IdP to integrate against.
+- Mobile app is a WebView shell (verified via typecheck + Metro bundle); native capture via
+  expo-camera is the planned upgrade if WebView capture limits show up on older devices.
 - Local-disk storage and in-process job queue — swap for S3 + a real queue to scale out.
 - Device switching is locked while recording.
 
