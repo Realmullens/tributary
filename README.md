@@ -1,12 +1,22 @@
-# Tributary
+<h1 align="center">Tributary</h1>
+
+<p align="center"><b>The open-source remote recording studio.</b><br/>
+Local per-guest recording · crash-proof uploads · separate tracks · text-based editing</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-7c5cff" alt="MIT license" /></a>
+  <a href="https://github.com/Realmullens/tributary/actions/workflows/ci.yml"><img src="https://github.com/Realmullens/tributary/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <img src="https://img.shields.io/badge/node-%E2%89%A520-2dd4bf" alt="Node 20+" />
+  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-a78bfa" alt="PRs welcome" /></a>
+</p>
+
+![Your own Riverside, self-hosted](docs/media/card-hero.png)
 
 A self-hostable, browser-based **remote recording studio** in the style of Riverside: a live
 video call for conversation, while every participant's camera and microphone are **recorded
 locally on their own device at full quality**, chunked, persisted, and **uploaded progressively
 in the background**. The host ends up with separate, synchronized, high-quality tracks per
 participant — plus mixed exports — no matter how rough the live connection was.
-
-![Studio room while recording](docs/screenshots/studio.png)
 
 <p align="center">
   <img src="docs/screenshots/lobby.png" alt="Lobby device check" width="49%" />
