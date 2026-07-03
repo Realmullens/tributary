@@ -6,6 +6,13 @@ locally on their own device at full quality**, chunked, persisted, and **uploade
 in the background**. The host ends up with separate, synchronized, high-quality tracks per
 participant — plus mixed exports — no matter how rough the live connection was.
 
+![Studio room while recording](docs/screenshots/studio.png)
+
+<p align="center">
+  <img src="docs/screenshots/lobby.png" alt="Lobby device check" width="49%" />
+  <img src="docs/screenshots/session.png" alt="Session dashboard with per-track downloads" width="49%" />
+</p>
+
 ## Core features
 
 - **Studios → sessions → invite links.** Hosts sign up; guests join with one link, no account.
@@ -67,12 +74,16 @@ participant — plus mixed exports — no matter how rough the live connection w
   everything else.
 - **Audio enhancement** — per-track noise reduction + loudness normalization (−16 LUFS);
   mixes automatically prefer enhanced audio.
-- **Mobile app** — Expo shell (`mobile/`) wrapping the studio with native camera/mic
-  permissions and keep-awake; your phone joins as a fully recorded extra camera.
+- **Mobile app (early)** — Expo shell (`mobile/`) wrapping the studio with native camera/mic
+  permissions and keep-awake; your phone joins as a fully recorded extra camera. This is a
+  young app shell, not a polished native app yet — expect rough edges.
 
 ## Quick start
 
-Requires Node 20+, pnpm, and ffmpeg/ffprobe on PATH (`brew install ffmpeg`).
+Requires Node 20+, pnpm, and ffmpeg/ffprobe on PATH (`brew install ffmpeg`). All
+configuration is optional and env-based — see [`.env.example`](.env.example) for the knobs
+(port, data dir, TURN, LiveKit, whisper). Contributions welcome — see
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ```bash
 pnpm install

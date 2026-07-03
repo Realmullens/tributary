@@ -219,7 +219,7 @@ export function RoomView({
 
       {/* Stage */}
       <div className="flex min-h-0 flex-1">
-        <main className="flex-1 overflow-y-auto p-4">
+        <main className="flex flex-1 flex-col justify-center overflow-y-auto p-4">
           <div
             className="grid gap-4"
             style={{
