@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, type ParticipantInfo } from "../lib/api";
 import { Lobby, type LobbyResult } from "../components/Lobby";
@@ -7,6 +7,19 @@ import { Button, Card, Input } from "../components/ui";
 
 type InviteInfo = { session: { id: string; title: string; status: string }; studioName: string };
 type Joined = { participant: ParticipantInfo; token: string; session: { id: string; title: string } };
+
+function GuestShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="min-h-screen bg-ink">
+      <header className="border-b border-edge bg-panel px-6 py-3">
+        <span className="bg-gradient-to-r from-accent-2 to-accent bg-clip-text text-2xl font-bold tracking-tight text-transparent">
+          Tributary
+        </span>
+      </header>
+      <main className="flex min-h-[calc(100vh-57px)] items-center justify-center p-6">{children}</main>
+    </div>
+  );
+}
 
 export function JoinPage() {
   const { inviteToken } = useParams<{ inviteToken: string }>();
@@ -54,36 +67,42 @@ export function JoinPage() {
 
   if (error) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-6">
-        <Card className="max-w-sm text-center">
-          <h1 className="text-lg font-semibold">Can't join</h1>
+      <GuestShell>
+        <Card className="w-full max-w-sm text-center !rounded-2xl !border-0 !bg-panel !p-8 ring-1 ring-edge">
+          <h1 className="text-2xl font-bold tracking-tight">Can't join</h1>
           <p className="mt-2 text-sm text-gray-400">{error}</p>
         </Card>
-      </div>
+      </GuestShell>
     );
   }
-  if (!invite) return <div className="p-6 text-sm text-gray-400">Loading…</div>;
+  if (!invite) {
+    return (
+      <GuestShell>
+        <div className="text-sm text-gray-400">Loading…</div>
+      </GuestShell>
+    );
+  }
 
   if (left) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-6">
-        <Card className="max-w-sm text-center">
-          <h1 className="text-lg font-semibold">Thanks for joining!</h1>
+      <GuestShell>
+        <Card className="w-full max-w-sm text-center !rounded-2xl !border-0 !bg-panel !p-8 ring-1 ring-edge">
+          <h1 className="text-2xl font-bold tracking-tight">Thanks for joining!</h1>
           <p className="mt-2 text-sm text-gray-400">
             You've left {invite.session.title}. If a recording was uploading, keep this browser
             around — reopening this link resumes any unfinished upload automatically.
           </p>
         </Card>
-      </div>
+      </GuestShell>
     );
   }
 
   if (!joined) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-6">
-        <Card className="w-full max-w-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-400">{invite.studioName}</p>
-          <h1 className="mt-1 text-xl font-semibold">{invite.session.title}</h1>
+      <GuestShell>
+        <Card className="w-full max-w-sm !rounded-2xl !border-0 !bg-panel !p-8 ring-1 ring-edge">
+          <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">{invite.studioName}</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight">{invite.session.title}</h1>
           <p className="mt-2 text-sm text-gray-400">
             You've been invited to a recording session. Your camera and mic will be recorded locally
             in full quality while you talk.
@@ -95,21 +114,25 @@ export function JoinPage() {
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && void join()}
             />
-            <Button onClick={() => void join()} disabled={!name.trim()}>Continue</Button>
+            <Button className="w-full" onClick={() => void join()} disabled={!name.trim()}>
+              Continue
+            </Button>
           </div>
         </Card>
-      </div>
+      </GuestShell>
     );
   }
 
   if (!lobbyResult) {
     return (
-      <Lobby
-        title={joined.session.title}
-        subtitle={`Joining as ${joined.participant.name}. Check your devices, then join.`}
-        joinLabel="Join studio"
-        onJoin={setLobbyResult}
-      />
+      <GuestShell>
+        <Lobby
+          title={joined.session.title}
+          subtitle={`Joining as ${joined.participant.name}. Check your devices, then join.`}
+          joinLabel="Join studio"
+          onJoin={setLobbyResult}
+        />
+      </GuestShell>
     );
   }
 

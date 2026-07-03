@@ -51,10 +51,12 @@ export function Teleprompter({
   };
 
   return (
-    <div className="flex h-full w-96 flex-col border-l border-edge bg-panel">
+    <div className="flex h-full w-80 flex-col border-l border-edge bg-panel">
       <div className="flex items-center justify-between border-b border-edge px-4 py-3">
         <h2 className="text-sm font-semibold">Teleprompter</h2>
-        <button onClick={onClose} className="text-gray-400 hover:text-white">✕</button>
+        <button onClick={onClose} className="text-gray-400 hover:text-white">
+          ✕
+        </button>
       </div>
 
       {editing ? (
@@ -63,7 +65,7 @@ export function Teleprompter({
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="Paste your script, questions, or talking points…"
-            className="flex-1 resize-none bg-panel-2 p-4 text-sm text-gray-100 outline-none"
+            className="flex-1 resize-none bg-panel-2 p-4 text-sm text-gray-100 outline-none focus:ring-1 focus:ring-accent"
           />
           <div className="flex gap-2 border-t border-edge p-3">
             <Button
@@ -74,7 +76,9 @@ export function Teleprompter({
             >
               Save script
             </Button>
-            <Button variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
+            <Button variant="ghost" onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
           </div>
         </>
       ) : (
@@ -110,7 +114,7 @@ export function Teleprompter({
                 max={150}
                 value={speed}
                 onChange={(e) => setSpeed(Number(e.target.value))}
-                className="flex-1 accent-[#4f7cff]"
+                className="flex-1 accent-accent"
               />
             </label>
             <label className="flex items-center gap-2 text-xs text-gray-400">
@@ -121,7 +125,7 @@ export function Teleprompter({
                 max={56}
                 value={fontSize}
                 onChange={(e) => setFontSize(Number(e.target.value))}
-                className="flex-1 accent-[#4f7cff]"
+                className="flex-1 accent-accent"
               />
             </label>
           </div>

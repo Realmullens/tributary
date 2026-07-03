@@ -73,7 +73,7 @@ export function Badge({
     green: "bg-emerald-500/15 text-emerald-300",
     yellow: "bg-amber-500/15 text-amber-300",
     red: "bg-rec/15 text-rec",
-    blue: "bg-accent/15 text-blue-300",
+    blue: "bg-accent/15 text-accent-2",
   };
   return (
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${tones[tone]}`}>

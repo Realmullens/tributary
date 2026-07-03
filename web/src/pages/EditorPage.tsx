@@ -176,7 +176,7 @@ export function EditorPage() {
     return (
       <div className="p-6 text-sm text-gray-400">
         No ready tracks for this recording yet.{" "}
-        <Link className="text-blue-300" to={`/sessions/${data.recording.session_id}`}>Back</Link>
+        <Link className="text-accent-2" to={`/sessions/${data.recording.session_id}`}>Back</Link>
       </div>
     );
   }
@@ -185,8 +185,8 @@ export function EditorPage() {
   const cols = Math.ceil(Math.sqrt(videoTracks.length || 1));
 
   return (
-    <div className="flex h-screen flex-col">
-      <header className="flex items-center justify-between border-b border-edge bg-panel px-4 py-2.5">
+    <div className="flex h-screen flex-col bg-ink">
+      <header className="flex items-center justify-between border-b border-edge bg-panel px-6 py-3">
         <div className="flex items-center gap-3">
           <Link to={`/sessions/${data.recording.session_id}`} className="text-sm text-gray-400 hover:text-white">
             ← {data.recording.session_title}
@@ -211,7 +211,7 @@ export function EditorPage() {
                 type="checkbox"
                 checked={captions}
                 onChange={(e) => setCaptions(e.target.checked)}
-                className="h-4 w-4 accent-[#4f7cff]"
+                className="h-4 w-4 accent-accent"
               />
               Captions
             </label>
@@ -233,7 +233,7 @@ export function EditorPage() {
             style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
           >
             {videoTracks.map((track) => (
-              <div key={track.id} className="relative overflow-hidden rounded-lg bg-panel-2">
+              <div key={track.id} className="relative overflow-hidden rounded-2xl bg-panel-2 ring-1 ring-edge">
                 <video
                   ref={(el) => {
                     if (el) mediaRefs.current.set(track.id, el);
@@ -244,7 +244,7 @@ export function EditorPage() {
                   playsInline
                   className="h-full w-full object-contain"
                 />
-                <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 text-xs text-white">
+                <span className="absolute bottom-2 left-2 rounded-full bg-black/60 px-2 py-0.5 text-xs text-white">
                   {track.participant_name}
                   {track.type === "screen" ? " (screen)" : ""}
                 </span>
@@ -264,7 +264,7 @@ export function EditorPage() {
           ))}
 
           {/* Transport */}
-          <div className="mt-3 flex items-center gap-3">
+          <div className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl bg-panel p-3 ring-1 ring-edge">
             <Button variant="ghost" onClick={() => setPlaying((p) => !p)}>
               {playing ? "Pause" : "Play"}
             </Button>
@@ -279,6 +279,7 @@ export function EditorPage() {
             </Button>
             <Button
               variant={pendingCutStart !== null ? "danger" : "ghost"}
+              className="!rounded-full"
               onClick={addCutPoint}
             >
               {pendingCutStart !== null ? "End cut here" : "Start cut here"}
@@ -289,7 +290,7 @@ export function EditorPage() {
           <div
             ref={timelineRef}
             onClick={timelineClick}
-            className="relative mt-3 h-16 cursor-pointer select-none rounded-lg border border-edge bg-panel-2"
+            className="relative mt-3 h-16 cursor-pointer select-none rounded-2xl bg-panel-2 ring-1 ring-edge"
           >
             {/* trimmed-away regions */}
             <div className="absolute inset-y-0 left-0 bg-black/50" style={{ width: pct(trimStartMs) }} />
@@ -332,7 +333,7 @@ export function EditorPage() {
               Trim: {formatDuration(trimStartMs)} → {formatDuration(effectiveTrimEnd)}
             </span>
             {cuts.map((cut, i) => (
-              <span key={i} className="flex items-center gap-1 rounded bg-rec/15 px-2 py-0.5 text-rec">
+              <span key={i} className="flex items-center gap-1 rounded-full bg-rec/15 px-2 py-0.5 text-rec">
                 cut {formatDuration(cut.startMs)}–{formatDuration(cut.endMs)}
                 <button
                   className="ml-1 hover:text-white"
@@ -368,18 +369,18 @@ export function EditorPage() {
         {((data.transcriptWords?.length ?? 0) > 0 || (data.transcriptSegments?.length ?? 0) > 0) && (
           <aside className="flex w-80 flex-col border-l border-edge bg-panel">
             <div className="border-b border-edge p-3">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
                 Transcript
               </h2>
               {data.transcriptWords?.length ? (
                 wordAnchor !== null && wordSelEnd !== null ? (
                   <div className="mt-2 flex gap-2">
-                    <Button variant="danger" onClick={cutSelectedWords} className="!py-1 text-xs">
+                    <Button variant="danger" onClick={cutSelectedWords} className="!rounded-full !py-1 text-xs">
                       Cut selected words
                     </Button>
                     <Button
                       variant="ghost"
-                      className="!py-1 text-xs"
+                      className="!rounded-full !py-1 text-xs"
                       onClick={() => {
                         setWordAnchor(null);
                         setWordSelEnd(null);
@@ -422,7 +423,7 @@ export function EditorPage() {
                     });
                     return blocks.map((block, bi) => (
                       <div key={bi} className="mb-3">
-                        <div className="mb-0.5 text-xs font-medium text-blue-300">
+                        <div className="mb-0.5 text-xs font-medium text-accent-2">
                           {block.speaker}
                           <span className="ml-2 tabular-nums text-gray-500">
                             {formatDuration(block.words[0].startMs)}
@@ -440,7 +441,7 @@ export function EditorPage() {
                               <span
                                 key={wi}
                                 onClick={() => clickWord(idx)}
-                                className={`cursor-pointer rounded px-0.5 hover:bg-panel-2 ${
+                                className={`cursor-pointer rounded-full px-0.5 hover:bg-panel-2 ${
                                   inCut ? "text-gray-500 line-through" : ""
                                 } ${selected ? "bg-accent/40" : ""} ${current ? "bg-white/20" : ""}`}
                               >
@@ -458,14 +459,14 @@ export function EditorPage() {
                       <button
                         key={i}
                         onClick={() => seek(seg.startMs)}
-                        className={`mb-1 block w-full rounded px-2 py-1 text-left text-sm hover:bg-panel-2 ${
+                        className={`mb-1 block w-full rounded-2xl px-2 py-1 text-left text-sm hover:bg-panel-2 ${
                           inCut ? "opacity-40 line-through" : ""
                         } ${playheadMs >= seg.startMs && playheadMs < seg.endMs ? "bg-accent/15" : ""}`}
                       >
                         <span className="mr-2 text-xs tabular-nums text-gray-500">
                           {formatDuration(seg.startMs)}
                         </span>
-                        <span className="font-medium text-blue-300">{seg.speaker}:</span>{" "}
+                        <span className="font-medium text-accent-2">{seg.speaker}:</span>{" "}
                         <span className="text-gray-200">{seg.text}</span>
                       </button>
                     );

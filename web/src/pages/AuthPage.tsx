@@ -29,12 +29,23 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-6">
-      <Card className="w-full max-w-sm">
-        <h1 className="text-xl font-semibold tracking-tight">Tributary</h1>
-        <p className="mt-1 text-sm text-gray-400">
-          {mode === "login" ? "Sign in to your studio" : "Create your host account"}
-        </p>
+    <div className="flex min-h-screen items-center justify-center bg-ink p-6">
+      <Card className="w-full max-w-sm !rounded-2xl !border-0 !bg-panel !p-8 ring-1 ring-edge">
+        <h1 className="text-center text-3xl">
+          <span className="bg-gradient-to-r from-accent-2 to-accent bg-clip-text font-bold tracking-tight text-transparent">
+            Tributary
+          </span>
+        </h1>
+        <div className="mt-6 text-center">
+          <h2 className="text-2xl font-bold tracking-tight">
+            {mode === "login" ? "Sign in to your studio" : "Create your host account"}
+          </h2>
+          <p className="mt-2 text-sm text-gray-400">
+            {mode === "login"
+              ? "Welcome back. Pick up where your recordings left off."
+              : "Set up your host account and start recording."}
+          </p>
+        </div>
         <div className="mt-5 flex flex-col gap-3">
           {mode === "register" && (
             <Input placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -53,7 +64,7 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
             onKeyDown={(e) => e.key === "Enter" && void submit()}
           />
           {error && <p className="text-sm text-rec">{error}</p>}
-          <Button onClick={() => void submit()} disabled={busy}>
+          <Button className="w-full" onClick={() => void submit()} disabled={busy}>
             {mode === "login" ? "Sign in" : "Create account"}
           </Button>
           <button

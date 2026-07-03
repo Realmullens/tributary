@@ -45,7 +45,7 @@ export function RecoveryBanner() {
   const remaining = healths.reduce((s, h) => s + (h.totalBytes - h.uploadedBytes), 0);
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 w-80 rounded-xl border border-edge bg-panel p-4 shadow-xl">
+    <div className="fixed bottom-4 right-4 z-50 w-80 rounded-2xl bg-panel p-4 shadow-xl ring-1 ring-edge">
       {items.size > 0 ? (
         <>
           <h3 className="text-sm font-semibold">Recovering unfinished uploads</h3>

@@ -105,9 +105,9 @@ export function Lobby({
   };
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6 p-6 md:flex-row">
+    <div className="mx-auto flex min-h-screen max-w-4xl flex-col gap-6 p-6 md:flex-row md:items-center">
       <div className="flex-1">
-        <div className="relative overflow-hidden rounded-xl border border-edge bg-panel-2" style={{ aspectRatio: "16/9" }}>
+        <div className="relative overflow-hidden rounded-2xl bg-panel-2 ring-1 ring-edge" style={{ aspectRatio: "16/9" }}>
           {stream && preset !== "audio" ? (
             <video ref={videoRef} autoPlay playsInline muted className="h-full w-full scale-x-[-1] object-cover" />
           ) : (
@@ -123,22 +123,22 @@ export function Lobby({
           </div>
         </div>
         {permissionError && (
-          <p className="mt-3 rounded-lg border border-rec/40 bg-rec/10 p-3 text-sm text-rec">{permissionError}</p>
+          <p className="mt-3 rounded-2xl bg-rec/10 p-3 text-sm text-rec ring-1 ring-rec/40">{permissionError}</p>
         )}
       </div>
 
-      <Card className="w-full md:w-80">
-        <h1 className="text-lg font-semibold">{title}</h1>
+      <Card className="w-full !rounded-2xl !border-0 !bg-panel !p-6 ring-1 ring-edge md:w-80">
+        <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-gray-400">{subtitle}</p>}
         <div className="mt-4 flex flex-col gap-3">
-          <label className="text-xs font-medium uppercase tracking-wide text-gray-400">Camera</label>
+          <label className="text-xs font-semibold uppercase tracking-wider text-gray-500">Camera</label>
           <Select
             value={cameraId}
             onChange={setCameraId}
             disabled={preset === "audio"}
             options={[{ value: "", label: "Default camera" }, ...cameras.map((c) => ({ value: c.deviceId, label: c.label }))]}
           />
-          <label className="text-xs font-medium uppercase tracking-wide text-gray-400">Microphone</label>
+          <label className="text-xs font-semibold uppercase tracking-wider text-gray-500">Microphone</label>
           <Select
             value={microphoneId}
             onChange={setMicrophoneId}
@@ -146,7 +146,7 @@ export function Lobby({
           />
           {showQualityPicker !== false && (
             <>
-              <label className="text-xs font-medium uppercase tracking-wide text-gray-400">Recording quality</label>
+              <label className="text-xs font-semibold uppercase tracking-wider text-gray-500">Recording quality</label>
               <Select
                 value={preset}
                 onChange={(v) => setPreset(v as QualityPreset)}
@@ -164,7 +164,7 @@ export function Lobby({
               type="checkbox"
               checked={headphones}
               onChange={(e) => setHeadphones(e.target.checked)}
-              className="h-4 w-4 accent-[#4f7cff]"
+              className="h-4 w-4 accent-accent"
             />
             I'm wearing headphones
           </label>
@@ -176,7 +176,7 @@ export function Lobby({
               type="checkbox"
               checked={recordWav}
               onChange={(e) => setRecordWav(e.target.checked)}
-              className="h-4 w-4 accent-[#4f7cff]"
+              className="h-4 w-4 accent-accent"
             />
             Studio-quality WAV audio track
           </label>
@@ -184,7 +184,7 @@ export function Lobby({
             Records an extra uncompressed 48kHz audio track straight from your mic — the best
             source for post-production.
           </p>
-          <Button onClick={join} disabled={!stream} className="mt-2">
+          <Button onClick={join} disabled={!stream} className="mt-2 w-full">
             {joinLabel}
           </Button>
         </div>
