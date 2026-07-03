@@ -1,0 +1,26 @@
+name: Feature request
+description: Propose an improvement or new capability
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the situation where you needed this, not just the feature itself.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How do you imagine it working? Rough is fine.
+    validations:
+      required: true
+  - type: dropdown
+    id: willing
+    attributes:
+      label: Would you be up for implementing it with guidance?
+      options:
+        - "Yes"
+        - "Maybe"
+        - "No"

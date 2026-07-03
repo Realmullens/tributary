@@ -1,0 +1,44 @@
+name: Bug report
+description: Something broke — a recording, an upload, the UI, the pipeline
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what happened instead?
+      placeholder: |
+        1. Started a session with 2 guests
+        2. Guest refreshed mid-recording
+        3. Their track shows 0 chunks on the session page
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Studio room (call, recording, uploads)
+        - Post-production (tracks, mixes, transcripts, exports)
+        - Editor / clips
+        - Live streaming / watch page
+        - Dashboard / auth / sessions
+        - CLI
+        - Mobile
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, browser + version (per affected participant), Node version, how you run the server
+      placeholder: "macOS 15, Chrome 138 (host) / guest on Windows Firefox 141, Node 22, pnpm dev"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / console output
+      description: Server log lines and browser console errors if you have them
+      render: shell
