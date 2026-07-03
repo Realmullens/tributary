@@ -33,6 +33,9 @@ transcript segments, words, and export edit parameters. What you read is what yo
 
 ## Recipes
 
+For fuller, copy-pasteable examples with agent prompts and the raw CLI commands
+they should produce, see [`AI-AGENT-COOKBOOK.md`](AI-AGENT-COOKBOOK.md).
+
 **Highlight clip for Shorts/Reels** — read the transcript, pick the best 45–60s span,
 render vertical with captions:
 
