@@ -26,6 +26,6 @@ stills, music). With the dev server running (`pnpm dev` at the repo root):
    header for the y4m ffmpeg one-liners.
 2. `scripts/readme-shots.mjs` — regenerates `docs/screenshots/*` (also used
    by the cards).
-3. Music: download "Voxel Revolution" from incompetech.com into `public/`
+3. Music: download "Born Of The Sky" from scottbuckley.com.au into `public/`
    (CC BY 4.0 — keep the credit, see CREDITS.md). SFX are synthesized with
    ffmpeg; commands in the git history / script comments.

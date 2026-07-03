@@ -59,7 +59,7 @@ Tweak voice to taste; keep the repo link in every post.
 
 ## Notes
 
-- The promo video credits "Voxel Revolution" by Kevin MacLeod (CC BY 4.0) in
+- The promo video credits "Born Of The Sky" by Scott Buckley (scottbuckley.com.au, CC BY 4.0) in
   the end card. If a platform strips the end card, add the credit to the post
   or description (see CREDITS.md).
 - `out/banner.png` (1280×640) is sized for the GitHub repo social preview:

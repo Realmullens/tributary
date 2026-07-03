@@ -1,6 +1,6 @@
 # Promo asset credits
 
-- **Music:** "Voxel Revolution" — Kevin MacLeod (incompetech.com).
+- **Music:** "Born Of The Sky" — Scott Buckley (scottbuckley.com.au).
   Licensed under Creative Commons: By Attribution 4.0
   (https://creativecommons.org/licenses/by/4.0/). The promo video includes
   this credit on the end card; keep it (or add it to the post/description)

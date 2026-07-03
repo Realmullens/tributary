@@ -112,16 +112,16 @@ export function Chip({
         display: "inline-flex",
         alignItems: "center",
         gap: 14,
-        padding: "18px 34px",
+        padding: "16px 32px",
         borderRadius: 999,
         background: bg,
         border: tone === "dark" ? `1.5px solid ${colors.edge}` : "none",
         color: "white",
-        fontSize: 34,
+        fontSize: 30,
         fontWeight: 650,
         fontFamily: font,
-        letterSpacing: -0.4,
-        boxShadow: "0 18px 50px rgba(0,0,0,0.45)",
+        letterSpacing: -0.3,
+        boxShadow: "0 14px 40px rgba(0,0,0,0.4)",
         transform: `translateY(${(1 - s) * 40}px) scale(${0.9 + 0.1 * s})`,
         opacity: Math.min(1, s * 1.5),
       }}
@@ -182,6 +182,10 @@ export function Beat({
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
+  const blur = interpolate(frame, [outAt - 10, outAt], [0, 8], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
   return (
     <AbsoluteFill
       style={{
@@ -189,6 +193,7 @@ export function Beat({
         justifyContent: "center",
         opacity,
         transform: `translateY(${y}px)`,
+        filter: blur > 0.1 ? `blur(${blur}px)` : undefined,
       }}
     >
       <div
