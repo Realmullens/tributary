@@ -20,5 +20,6 @@
       "better-sqlite3",
       "esbuild"
     ]
-  }
+  },
+  "license": "MIT"
 }
